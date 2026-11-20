@@ -122,7 +122,7 @@ private final class PaneLastFrameView: NSView {
     func uncover() {
         guard let was = covered else { return }
         covered = nil
-        guard let live, live.opacity == 0 else { return }
+        guard let live else { return }
         Self.write(was, to: live)
     }
 
