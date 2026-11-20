@@ -123,7 +123,7 @@ private final class PaneLastFrameView: NSView {
         guard let was = covered else { return }
         covered = nil
         guard let live, live.opacity == 0 else { return }
-        Self.write(was, to: live)
+        live.opacity = was
     }
 
     private static func write(_ opacity: Float, to layer: CALayer) {
