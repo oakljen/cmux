@@ -106,7 +106,7 @@ private final class PaneLastFrameView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { uncover() } else { cover() }
+        if window != nil { cover() }
     }
 
     /// The live picture goes clear under this view, one time, with no animation.
