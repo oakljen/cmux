@@ -11,10 +11,16 @@ import CmuxNextDesignTokens
 /// themes/modes". The native half of the control contrast audit (the web half is
 /// webviews/test/control-contrast-N.test.ts): every shared button look cmux draws in AppKit and
 /// SwiftUI is rendered for real in an offscreen window, in a spread of light, dark and
-/// terminal-tinted themes, on the three grounds a control sits on (the window, a popover's surface,
-/// and a see-through window over the worst desktop), enabled and disabled. The popover is a real
-/// ``OverlaySurfaceView`` on its opaque popup surface (Reduce Transparency; the glass does not render
-/// offscreen), so each control fits its inks to the ground it finds in the view tree, as in the app.
+/// terminal-tinted themes, on the grounds a control sits on (the window, a popover's opaque surface, a
+/// popover's glass over its own window, over a white and over a black page, and a see-through window over
+/// the worst desktop), enabled and disabled. The opaque popover is a real ``OverlaySurfaceView`` on its popup
+/// surface (Reduce Transparency). The glass popover is a real menu panel
+/// (``Glass/makeMenuPanel(content:cornerRadius:interactive:)``, the bookmark bubble's and the host pressure
+/// popover's surface) on its blur material over the page: its tint and veil draw from the layer tree (the blur
+/// itself draws nothing offscreen), and the suite checks that the ground reads back as the menu glass over that
+/// page. Each control fits its inks to the ground it finds in the view tree, as in the app. Hot Dog Stand's gray
+/// buttons read 2.66 to 3.68:1 on its popover glass over its own red window in the real app while the opaque
+/// ground passed (fixed in e03795f).
 /// It was the ``CardMaterial`` fill over the worst desktop, which no native overlay draws. Each
 /// control's label is read from the painted pixels: its ink against its own fill must reach 4.5:1
 /// for text (3:1 for an icon), and a disabled control's 2.5:1, the legible floor.
@@ -45,7 +51,22 @@ import CmuxNextDesignTokens
     enum Ground: String, CaseIterable {
         case window
         case popover
+        case glassOverWindow = "popover glass over its window"
+        case glassOverWhite = "popover glass over a white page"
+        case glassOverBlack = "popover glass over a black page"
         case seeThrough = "see-through window"
+
+        /// The page under a glass popover in `tokens`' theme; nil for a ground with no glass.
+        func page(_ tokens: ThemeTokens) -> ThemeRGB? {
+            switch self {
+            case .glassOverWindow: tokens.windowBackground.withAlpha(1)
+            case .glassOverWhite: .white
+            case .glassOverBlack: .black
+            case .window, .popover, .seeThrough: nil
+            }
+        }
+
+        var isGlass: Bool { self == .glassOverWindow || self == .glassOverWhite || self == .glassOverBlack }
     }
 
     /// One control as the audit draws it.
@@ -122,7 +143,7 @@ import CmuxNextDesignTokens
             }
         }
         let failures = failing.filter { $0.ratio + 0.005 < (known[$0.key] ?? .infinity) }
-        #expect(readings.count > themes.count * 6 * 10, "too few controls were read: \(readings.count)")
+        #expect(readings.count > themes.count * Ground.allCases.count * 2 * 10, "too few controls were read: \(readings.count)")
         var perControl: [String: Int] = [:]
         for failure in failures { perControl[failure.control + (failure.disabled ? " (disabled)" : ""), default: 0] += 1 }
         let kinds = perControl.sorted { $0.value > $1.value }.map { "\($0.value)x \($0.key)" }
@@ -149,11 +170,13 @@ import CmuxNextDesignTokens
         let groundColor: ThemeRGB = switch ground {
         case .window: tokens.windowBackground.withAlpha(1)
         case .popover: tokens.opaqueOverlayFill(lift: ChromeTunables.opaqueOverlayLift.value)
+        case .glassOverWindow, .glassOverWhite, .glassOverBlack: menuGlass(tokens, over: ground.page(tokens) ?? .white)
         case .seeThrough: tokens.windowBackground.composited(over: desktop)
         }
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 360))
         container.wantsLayer = true
-        container.layer?.backgroundColor = groundColor.nsColor.cgColor
+        // Under glass the container is the page: the menu panel lays its tint and veil on it.
+        container.layer?.backgroundColor = (ground.page(tokens) ?? groundColor).nsColor.cgColor
         let window = NSWindow(contentRect: container.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         // The capture is read as sRGB: a window in the screen's space shifts the danger fill
@@ -167,6 +190,14 @@ import CmuxNextDesignTokens
         var host: NSView = container
         if ground == .popover {
             let surface = OverlaySurfaceView(material: .opaque, interactive: true, cornerRadius: 0)
+            surface.frame = container.bounds
+            container.addSubview(surface)
+            host = surface.contentView
+        } else if ground.isGlass {
+            let surface = Glass.makeMenuPanel(interactive: true)
+            // The blur before Liquid Glass: its tint and veil are plain layers, which the layer capture below draws
+            // (the blur itself draws nothing offscreen). Liquid Glass drew the whole panel black.
+            surface.materialOverride = .vibrancy
             surface.frame = container.bounds
             container.addSubview(surface)
             host = surface.contentView
@@ -196,8 +227,11 @@ import CmuxNextDesignTokens
         container.layoutSubtreeIfNeeded()
         for view in allViews(container) { view.viewDidChangeEffectiveAppearance(); view.needsDisplay = true }
         container.layoutSubtreeIfNeeded()
-        let rep = try #require(container.bitmapImageRepForCachingDisplay(in: container.bounds))
-        container.cacheDisplay(in: container.bounds, to: rep)
+        // cacheDisplay draws nothing inside a blur view (its tint, veil and controls went missing, and with them every
+        // reading on glass); the layer tree draws them.
+        let rep = ground.isGlass ? try layerCapture(container, in: window)
+            : try #require(container.bitmapImageRepForCachingDisplay(in: container.bounds))
+        if !ground.isGlass { container.cacheDisplay(in: container.bounds, to: rep) }
         let scale = CGFloat(rep.pixelsWide) / container.bounds.width
         // A headless Mac tags the capture with a generic RGB profile while its bytes hold the sRGB
         // values (#d93b31 then converts to #e3523f, as if gamma 1.8): read each pixel both through
@@ -208,6 +242,13 @@ import CmuxNextDesignTokens
         }
         let best = try #require(reads.min { $0.drift < $1.drift })
         let read = best.read
+        // Under glass, an empty corner of the panel must read back as the menu glass over the page, or the
+        // controls were not drawn on the ground the audit names.
+        if ground.isGlass {
+            let empty = try #require(read.color(rep, x: Int((container.bounds.width - 40) * scale), y: rep.pixelsHigh - Int(40 * scale)))
+            #expect(empty.drift(from: groundColor) < 3 / 255, Comment(rawValue: "\(theme.name) \(ground.rawValue): the ground read "
+                + "\(empty.auditHex), the menu glass is \(groundColor.auditHex)"))
+        }
         #expect(best.drift < 2.5 / 255, Comment(rawValue: "the capture shifts colors: #d93b31 read back as "
             + reads.map { "\($0.read): \($0.read.color(rep, x: swatchAt.x, y: swatchAt.y)?.auditHex ?? "-")" }.joined(separator: ", ")
             + " (rep \(rep.colorSpace.localizedName ?? rep.colorSpaceName.rawValue), \(rep.bitsPerSample) bits, format \(rep.bitmapFormat.rawValue))"))
@@ -231,6 +272,30 @@ import CmuxNextDesignTokens
     }
 
     private static func allViews(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(allViews) }
+
+    /// `view`'s layer tree drawn into an sRGB bitmap at `window`'s scale, after the window displays.
+    private static func layerCapture(_ view: NSView, in window: NSWindow) throws -> NSBitmapImageRep {
+        window.display()
+        let scale = max(window.backingScaleFactor, 1)
+        let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * scale),
+                                                pixelsHigh: Int(view.bounds.height * scale), bitsPerSample: 8, samplesPerPixel: 4,
+                                                hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+                                                bitsPerPixel: 0)?.retagged(with: .sRGB))
+        let context = try #require(NSGraphicsContext(bitmapImageRep: rep)).cgContext
+        context.scaleBy(x: scale, y: scale)
+        try #require(view.layer).render(in: context)
+        return rep
+    }
+
+    /// The theme's glass tint at the menu level, as a menu panel tints its glass.
+    static func menuTint(_ tokens: ThemeTokens) -> ThemeRGB {
+        tokens.glassTint.withAlpha(min(1, tokens.glassTint.alpha * GlassMenuMaterial.level.tintStrength))
+    }
+
+    /// A menu panel's glass over `page`: the tint, then the theme veil (``GlassMenuMaterial/veil``).
+    static func menuGlass(_ tokens: ThemeTokens, over page: ThemeRGB) -> ThemeRGB {
+        tokens.surfaceBackground.withAlpha(Double(GlassMenuMaterial.veil)).composited(over: menuTint(tokens).composited(over: page))
+    }
 
     /// Every shared button look, as the app constructs it.
     static func catalog(scope: ThemeScope, disabled: Bool) -> [Sample] {
