@@ -1,5 +1,7 @@
 # Building cmux-tui on Windows and Linux
 
+> Fork of [manaflow-ai/cmux](https://github.com/manaflow-ai/cmux) by Manaflow, Inc. See [ATTRIBUTION-PORT.md](ATTRIBUTION-PORT.md).
+
 `cmux-tui` is the cross-platform Rust multiplexer in this repo. It builds and
 runs on Linux and Windows 10/11. (The Swift macOS app does not; use cmux-tui.)
 
