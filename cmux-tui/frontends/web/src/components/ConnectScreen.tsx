@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { t } from "../i18n";
 import type { ConnectionConfig } from "../hooks/useCmuxClient";
 import { initialConnectionConfig, rememberWebSocketUrl } from "../lib/connectionDefaults";
@@ -26,9 +26,12 @@ export function ConnectScreen({ connecting, error, pairing, onConnect }: Connect
     // never enters the HTTP request and lives in memory only from here on.
     const params = new URLSearchParams(window.location.search);
     const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    if (params.has("ws") || params.has("token") || fragment.has("token")) {
+    // `?autoconnect=1` (used by the desktop shell) connects once on load.
+    const autoconnect = params.get("autoconnect") === "1";
+    if (params.has("ws") || params.has("token") || fragment.has("token") || autoconnect) {
       params.delete("ws");
       params.delete("token");
+      params.delete("autoconnect");
       const search = params.toString();
       const hash = removeTokenFragment(window.location.hash);
       window.history.replaceState(
@@ -37,9 +40,17 @@ export function ConnectScreen({ connecting, error, pairing, onConnect }: Connect
         window.location.pathname + (search ? `?${search}` : "") + (hash ? `#${hash}` : ""),
       );
     }
-    return config;
+    return { ...config, autoconnect };
   });
   const [url, setUrl] = useState(initial.url);
+  const autoconnected = useRef(false);
+  useEffect(() => {
+    if (!initial.autoconnect || autoconnected.current) return;
+    autoconnected.current = true;
+    onConnect({ url: initial.url.trim(), token: initial.token || undefined });
+    // Intentionally once: the initial config is consumed from the URL on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const normalizedUrl = url.trim();

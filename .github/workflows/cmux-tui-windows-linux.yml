@@ -30,7 +30,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # windows-2022 ships the MSVC 14.4x toolset. The newest runner images carry an
+        # MSVC STL that rejects Zig 0.16's bundled clang (STL1000, needs Clang 22+).
+        os: [ubuntu-latest, windows-2022]
     defaults:
       run:
         shell: bash
@@ -79,10 +81,12 @@ jobs:
 
       - name: Test
         working-directory: cmux-tui
+        timeout-minutes: 25
         # durable_workspace_creation_supports_the_in_process_terminal_runtime is
         # flaky under parallel runs (passes alone); tracked in docs/building-windows-linux.md.
         run: >
           cargo test -p cmux-pty -p cmux-tui-core --no-fail-fast --
+          --test-threads=1
           --skip durable_workspace_creation_supports_the_in_process_terminal_runtime
           --skip stalled_surface_route_does_not_block_shared_cdp_reader
 
