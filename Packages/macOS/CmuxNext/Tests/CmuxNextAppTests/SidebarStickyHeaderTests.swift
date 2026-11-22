@@ -135,6 +135,12 @@ struct SidebarStickyHeaderTests {
         let after = try Self.header(bench)
         #expect(after.view === before.view)
         #expect(after.row.isCollapsed)
+        // Every row starts on a device pixel, so the clip (which AppKit snaps to one) can sit exactly on the header's
+        // place: on a 1x screen the density's 3.5 pt top padding left each row half a point between two pixels.
+        let scale = try #require(bench.list.window?.backingScaleFactor)
+        for row in bench.list.displayed.rows.prefix(40) {
+            #expect(abs(row.y * scale - (row.y * scale).rounded()) < 0.001, "\(row.key) at y \(row.y) on the \(scale)x pixel grid")
+        }
         #expect(abs(after.row.y - Self.top(bench)) < 0.5, "the collapsed header is at its own place, at the visible top")
         #expect(after.view.frame == bench.list.frame(for: after.row))
         #expect(abs(after.view.frame.minY - bench.clip.bounds.minY - onScreen) < 0.5, "the header did not move on screen")

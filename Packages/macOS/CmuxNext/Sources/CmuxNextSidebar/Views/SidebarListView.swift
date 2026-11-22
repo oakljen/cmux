@@ -323,6 +323,8 @@ final class SidebarListView: NSView {
     }
     // MARK: - Window occlusion
     private var observedWindow: NSWindow?
+    /// The backing scale the rows were last snapped to (`metrics`): 2 without a window, as `metrics` reads it.
+    private var laidOutScale: CGFloat = 2
     private var occlusionObserver: (any NSObjectProtocol)?
     /// Each motion-setting change (the system's Reduce Motion too) starts or stops the rows' needs-you glow breath.
     private var needsYouMotion: MotionSubscription?
@@ -341,6 +343,13 @@ final class SidebarListView: NSView {
         super.viewWillMove(toWindow: newWindow)
         // Off screen a card's landing never completes: it ends now (its held rows show, the reloads stop adopting).
         if newWindow == nil, let landing { finishLand(landing, then: landing.landingThen) }
+    }
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        // A move between a 1x and a 2x screen changes the pixel grid the rows sit on (`metrics`).
+        guard let scale = window?.backingScaleFactor, scale != laidOutScale else { return }
+        laidOutScale = scale
+        reload(animated: false)
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -406,7 +415,8 @@ final class SidebarListView: NSView {
     nonisolated override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {}
     override var acceptsFirstResponder: Bool { true }
-    var metrics: SidebarLayoutMetrics { .standard }
+    /// The density's metrics on this window's pixel grid (`pixelAligned(scale:)`).
+    var metrics: SidebarLayoutMetrics { SidebarLayoutMetrics.standard.pixelAligned(scale: window?.backingScaleFactor ?? 2) }
     var inset: CGFloat { SidebarStyle.horizontalInset }
     // MARK: - Hover
     override func updateTrackingAreas() {

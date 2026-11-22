@@ -56,6 +56,27 @@ public nonisolated struct SidebarLayoutMetrics: Hashable, Sendable {
         return m
     }
 
+    /// These metrics with every step between rows on the device pixel grid of a `scale`x screen. The densities are
+    /// Default scaled by one factor (#44449), on half points: on a 2x screen nothing changes, on a 1x screen the list's
+    /// 3.5 pt top padding put every row between two pixels, so a fold that moved the scroll to a header's place left the
+    /// clip, which AppKit snaps to a pixel, half a point off the header.
+    /// - Parameter scale: The window's `backingScaleFactor`.
+    /// - Returns: The metrics with their row steps snapped; a row's status block inside it keeps its own pitch.
+    public func pixelAligned(scale: CGFloat) -> SidebarLayoutMetrics {
+        guard scale > 0 else { return self }
+        func snap(_ value: CGFloat) -> CGFloat { (value * scale).rounded() / scale }
+        var m = self
+        m.topPadding = snap(topPadding)
+        m.bottomPadding = snap(bottomPadding)
+        m.sectionHeaderHeight = snap(sectionHeaderHeight)
+        m.sectionSpacing = snap(sectionSpacing)
+        m.rowHeight = snap(rowHeight)
+        m.rowHeightWithSubtitle = snap(rowHeightWithSubtitle)
+        m.rowSpacing = snap(rowSpacing)
+        m.emptySectionHeight = snap(emptySectionHeight)
+        return m
+    }
+
     /// The metrics a layout under `o` uses: Expanded's two-line rows (not with workspaces as tabs,
     /// whose rows are one line at any density). Every place that sizes list rows reads this, so a
     /// header and a row cannot take different steps. Minimal Mode (`sidebar.minimal`) only hides
