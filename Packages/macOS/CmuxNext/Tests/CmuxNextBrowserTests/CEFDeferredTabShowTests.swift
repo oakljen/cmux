@@ -310,6 +310,48 @@ import Testing
         #expect(ready == 1, "the page reported twice for one commit")
     }
 
+    /// The page's answer is read once each display frame (the renderer's script path answers at once and never waits
+    /// for a promise): the first read starts the page's watch and says not yet, a later one says it laid out, and that
+    /// read ends the wait at once, before its bound.
+    @Test(.timeLimit(.minutes(1)))
+    func aPageThatLaysOutAfterTheFirstReadIsReadyAtTheReadThatSaysSo() async throws {
+        let (runtime, root) = try Self.runtime()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (_, first, window, answers, frames) = try Self.zoomablePage(runtime)
+        defer { window.closeAfterTest() }
+        defer { answers.answer(false) }
+        let page = first.container
+        let before = CEFHostView.trackerStats
+
+        var ready = 0
+        var readyCame: CheckedContinuation<Void, Never>?
+        page.commitWillResize(by: CGSize(width: 480, height: 0)) {
+            ready += 1
+            readyCame?.resume()
+            readyCame = nil
+        }
+        // The first read starts the watch; the page has not laid out yet.
+        while answers.asked.isEmpty { await Task.yield() }
+        answers.answerWaiting(false)
+        while answers.returned < 1 { await Task.yield() }
+        await Task.yield()
+        // The next display frame reads again: one read out at a time.
+        frames.tick()
+        while answers.asked.count < 2 { await Task.yield() }
+        #expect(answers.firsts == [true, false], "only the first read starts the watch: \(answers.firsts)")
+        #expect(CEFHostView.trackerStats.commitAnswerReads == before.commitAnswerReads + 2)
+        #expect(ready == 0, "the page is ready before a read said it laid out")
+        if ready == 0 {
+            await withCheckedContinuation { done in
+                readyCame = done
+                answers.answerWaiting(true)
+            }
+        }
+        #expect(ready == 1)
+        #expect(CEFHostView.trackerStats.commitWaitsAnswered == before.commitWaitsAnswered + 1, "the read that said so did not end the wait")
+        #expect(CEFHostView.trackerStats.commitWaitsAtBound == before.commitWaitsAtBound, "the wait ran to its bound")
+    }
+
     /// A page that does not lay out at the zoomed size in time asks its commit to wait for it longer than the commit's
     /// own bound (``CEFCommitPageWait/commitTicks``), and is ready at its own bound, one frame under that: it is never
     /// late, so its pane never shows its ground instead of the page. Once it reported it asks for no more.
@@ -578,15 +620,30 @@ private nonisolated enum TabSpyShim {
 /// later ask.
 @MainActor private final class LayoutAnswers {
     private(set) var asked: [CGSize] = []
+    /// For each read, whether it started the page's watch.
+    private(set) var firsts: [Bool] = []
     private var waiting: [CheckedContinuation<Bool, Never>] = []
     private var given: Bool?
 
     var laidOut: CEFCommitLayoutWait.LaidOut {
-        { [self] _, pixels in
+        { [self] _, pixels, first in
             asked.append(pixels)
+            firsts.append(first)
             if let given { return given }
-            return await withCheckedContinuation { waiting.append($0) }
+            let laid = await withCheckedContinuation { waiting.append($0) }
+            returned += 1
+            return laid
         }
+    }
+
+    /// Reads that got their answer and returned it.
+    private(set) var returned = 0
+
+    /// Answers the reads waiting now, and no later one.
+    func answerWaiting(_ laidOut: Bool) {
+        let all = waiting
+        waiting = []
+        for ask in all { ask.resume(returning: laidOut) }
     }
 
     /// Answers every ask still waiting, and every ask from now on.

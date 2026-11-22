@@ -58,16 +58,13 @@ public nonisolated struct CEFTrackerStats: Equatable, Sendable {
     public var commitWaitsAnswered = 0
     public var commitWaitsAtBound = 0
     public var commitWaitsLeft = 0
-    /// Page answers of those waits (``CEFCommitLayoutWait/laidOut``): ones that came after the wait reported, ones
-    /// that said no (the page did not lay out at the size, or the script could not run: ``commitAnswersFailed`` of
-    /// them), and the seconds from each ask to its answer, summed.
+    /// Reads of a page's answer for those waits (``CEFCommitLayoutWait/laidOut``, one per display frame at most),
+    /// answers that came after the wait reported at its bound, reads that failed, and the seconds from each wait's start
+    /// to the answer that ended it, summed.
+    public var commitAnswerReads = 0
     public var commitAnswersLate = 0
-    public var commitAnswersNo = 0
     public var commitAnswersFailed = 0
     public var commitAnswerSeconds = 0.0
-    /// The last page that never reached its commit's size: its viewport and the size asked for, in device pixels
-    /// (width, height, asked width, asked height); empty when none.
-    public var commitLastMiss: [Double] = []
 
     public init() {}
 
@@ -96,11 +93,9 @@ public nonisolated struct CEFTrackerStats: Equatable, Sendable {
          "fence_presented": Double(resizeFencePresented), "fence_missed": Double(resizeFenceMissed),
          "fences_expired": Double(resizeFencesExpired), "fence_join_ms": resizeFenceJoinSeconds * 1_000,
          "commit_answered": Double(commitWaitsAnswered), "commit_at_bound": Double(commitWaitsAtBound),
-         "commit_left": Double(commitWaitsLeft), "commit_answer_late": Double(commitAnswersLate),
-         "commit_answer_no": Double(commitAnswersNo), "commit_answer_failed": Double(commitAnswersFailed),
-         "commit_answer_ms": commitAnswerSeconds * 1_000,
-         "commit_miss_w": commitLastMiss.first ?? -1, "commit_miss_h": commitLastMiss.dropFirst().first ?? -1,
-         "commit_miss_asked_w": commitLastMiss.dropFirst(2).first ?? -1, "commit_miss_asked_h": commitLastMiss.dropFirst(3).first ?? -1]
+         "commit_left": Double(commitWaitsLeft), "commit_answer_reads": Double(commitAnswerReads),
+         "commit_answer_late": Double(commitAnswersLate), "commit_answer_failed": Double(commitAnswersFailed),
+         "commit_answer_ms": commitAnswerSeconds * 1_000]
     }
 
     /// Monotonic seconds for timing a read.

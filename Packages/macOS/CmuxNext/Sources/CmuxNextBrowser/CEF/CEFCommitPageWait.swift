@@ -2,7 +2,7 @@ import AppKit
 
 /// One wait of a page that took its pane's next size ahead of a layout commit (``CEFTabContentView`` as a
 /// `PaneCommitSurface`, on an engine with no resize fence): it reports `ready` once, when the page laid out at the
-/// size (``CEFCommitLayoutWait/laidOut``) or at ``readyFrames`` display frames, and asks for `release` at
+/// size (``CEFCommitLayoutWait/laidOut``, read once each display frame) or at ``readyFrames`` display frames, and asks for `release` at
 /// ``releaseFrames`` frames when the page still holds that size then (a commit that never showed).
 ///
 /// The page asks its commit to wait up to ``commitTicks`` frames for it (``PaneCommitSurface/commitWaitTicks``; the
@@ -31,8 +31,16 @@ final class CEFCommitPageWait {
     private var frames = 0
     /// In a frame's tick: the tick's own answer stops the frames, not a call back into the frame source.
     private var inFrame = false
+    private weak var tab: CEFTab?
+    private let pixels: CGSize
+    private let laidOut: CEFCommitLayoutWait.LaidOut
+    /// A read of the page's answer is out: the next one goes at the frame after it came back.
+    private var asking = false
+    private var asks = 0
+    private let asked = CEFTrackerStats.now()
 
-    /// Starts the wait now.
+    /// Starts the wait now: asks the page to watch for the size, then reads its answer once each display frame (one
+    /// read out at a time) until it laid out there or the wait reports.
     /// - Parameters:
     ///   - tab: the page that took the size.
     ///   - view: a view in the page's window, whose display frames bound the wait.
@@ -44,20 +52,33 @@ final class CEFCommitPageWait {
          ready: @escaping @MainActor () -> Void, release: @escaping @MainActor () -> Void) {
         self.ready = ready
         self.release = release
+        self.tab = tab
+        self.pixels = pixels
+        laidOut = wait.laidOut
         stopFrames = wait.frames(view) { [weak self] last in self?.frame(last: last) ?? false }
-        let laidOut = wait.laidOut
-        let asked = CEFTrackerStats.now()
+        ask()
+    }
+
+    /// One read of the page's answer: the first one starts the page's watch.
+    private func ask() {
+        guard let tab, !asking else { return }
+        asking = true
+        let first = asks == 0, pixels = self.pixels, laidOut = self.laidOut
+        asks += 1
+        CEFHostView.trackerStats.commitAnswerReads += 1
         answer = Task { [weak self, weak tab] in
             guard let tab else { return }
-            let laid = await laidOut(tab, pixels)
-            // Counted whether or not the wait still runs: an answer that comes after the bound is late, not lost.
-            CEFHostView.trackerStats.commitAnswerSeconds += CEFTrackerStats.now() - asked
-            if !laid { CEFHostView.trackerStats.commitAnswersNo += 1 }
+            let laid = await laidOut(tab, pixels, first)
+            // A later change replaced this wait (`cancel()`): its answer is void.
+            guard let self, !Task.isCancelled else { return }
+            self.asking = false
             guard laid else { return }
-            guard let self, self.owesReport else {
+            guard self.owesReport else {
+                // The wait reported at its bound before this answer came: late, not lost.
                 CEFHostView.trackerStats.commitAnswersLate += 1
                 return
             }
+            CEFHostView.trackerStats.commitAnswerSeconds += CEFTrackerStats.now() - self.asked
             self.report(.answered)
         }
     }
@@ -108,7 +129,7 @@ final class CEFCommitPageWait {
         inFrame = true
         defer { inFrame = false }
         frames += 1
-        if last { report(.left) } else if frames >= Self.readyFrames { report(.atBound) }
+        if last { report(.left) } else if frames >= Self.readyFrames { report(.atBound) } else if owesReport { ask() }
         if last || frames >= Self.releaseFrames, let release {
             self.release = nil
             release()
