@@ -9,6 +9,12 @@
   on one line. Calm mode, which opens no hover card, keeps a clipped name's tooltip. Nothing moves or redraws.
   Regression: `SidebarUsageWarningTests`, `SidebarIconMeaningTests`, `SidebarRowBadgeStackCapTests`,
   `SidebarStatusSimpleTests`, `CloudMachineCostTests`.
+- 2026-11-22 (a-rolling-summaries, playground card): Sidebar-Look: Chief, 2026-11-22: the States Playground's
+  pinned hover-card shots were empty boxes. The playground drew the card on Liquid Glass, whose content the window
+  server composites and a view's bitmap (`cacheDisplay`) never gets. It now draws the same card on the overlay
+  surface's blur material (`OverlaySurfaceView(material: .vibrancy)`), sized to the card's fitting size: same shape,
+  theme tint and content, now in the shot. The app's own hover card is unchanged. Regression:
+  `SidebarStatesPlaygroundCatalogTests` (the card's pixels must carry ink across it).
 - 2026-11-21 (hide-app-store-2): Sidebar-Look: David Beyer, Nov 20 call: "don't show the app store until it's ready, it takes too much space"; the person: hide it by default, keep a setting that turns it back on. With `labs.previewFeatures` off (the default) the App Store item is hidden in every look: the `cmux/app-store` app item (0aa5aa4a64043, `SidebarAppItemInfo`) and now the `app_store` built-in of a layout stored before it became an app (`SidebarBuiltIn.defaultInfo(showsStore:)`). The stored layout keeps both; Labs on draws them again. `AppStoreHiddenUntilReadyTests`.
 - 2026-11-21 (lane/sidebar-pin-archive): Sidebar-Look: Leo, 2026-11-21: "the pin button does not make sense. you
   expect this to be the pinned thing. but it isn't. when you pin it, the pin goes to teh left of the bar as an empty
