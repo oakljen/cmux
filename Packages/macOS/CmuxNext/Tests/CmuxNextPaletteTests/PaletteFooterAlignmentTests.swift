@@ -62,14 +62,16 @@ struct PaletteFooterAlignmentTests {
         var left: CGFloat = 0
         var glyphs: [(min: CGFloat, max: CGFloat, mid: CGFloat)] = []
         for cap in keys.keycaps {
-            let width = max(PaletteLayout.keycapSize, ceil((cap as NSString).size(withAttributes: [.font: Typography.shortcut]).width) + Metrics.space2 * 2)
-            glyphs.append(try #require(ink.rows(in: NSRect(x: left, y: 0, width: width, height: size.height), above: fillAlpha), "\(cap) draws"))
+            let width = keys.capWidth(cap)
+            // Inside the cap's hairline edge (and clear of its rounded corners), only the legend is above the fill.
+            let inside = NSRect(x: left, y: 0, width: width, height: size.height).insetBy(dx: PaletteLayout.keycapCornerRadius, dy: 1)
+            glyphs.append(try #require(ink.rows(in: inside, above: fillAlpha), "\(cap) draws"))
             left += width + Metrics.space1
         }
         let middle = size.height / 2
         #expect(glyphs[0].mid < middle - 1, "\",\" sits low in its cap: \(glyphs[0]) in a cap centered at \(middle)")
         #expect(glyphs[1].mid < middle - 1, "\".\" sits low in its cap: \(glyphs[1]) in a cap centered at \(middle)")
-        #expect(abs(glyphs[2].mid - middle) <= 0.75, "↩ centers in its cap: \(glyphs[2]) in a cap centered at \(middle)")
+        #expect(abs(glyphs[2].mid - middle) <= 0.75, "↩ (\"return\") centers in its cap: \(glyphs[2]) in a cap centered at \(middle)")
     }
 
     private static func check(_ model: PaletteModel, appearance: NSAppearance.Name, _ label: String, windows: inout [NSWindow]) throws {
@@ -108,7 +110,9 @@ struct PaletteFooterAlignmentTests {
             #expect(abs(cap.mid - midY) <= tolerance, "\(label): the \(keys.keycaps) cap centers at \(cap.mid), the footer's middle is \(midY)")
             // The fill's alpha beside the glyph (a cap is at least as wide as tall and its glyph is centered).
             let fillAlpha = ink.alpha(x: frame.minX + Metrics.space1, y: midY)
-            let glyph = try #require(ink.rows(in: frame, above: fillAlpha), "\(label): \(keys.keycaps) draws no glyph")
+            // Inside the cap's hairline edge (and clear of its rounded corners), only the legend is above the fill.
+            let glyph = try #require(ink.rows(in: frame.insetBy(dx: PaletteLayout.keycapCornerRadius, dy: 1), above: fillAlpha),
+                                     "\(label): \(keys.keycaps) draws no glyph")
             #expect(abs(glyph.mid - midY) <= tolerance,
                     "\(label): the \(keys.keycaps) glyph centers at \(glyph.mid), the footer's middle is \(midY)")
             measured.append(keys.keycaps.joined())
