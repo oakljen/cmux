@@ -1715,6 +1715,7 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
     }
 
+    #[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
     #[test]
     fn persistent_hook_delivery_records_started_and_completed_receipts() {
         let root = std::env::temp_dir().join(format!(
@@ -1751,6 +1752,7 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
     #[test]
     fn hook_causal_descendants_are_not_rescheduled_by_default() {
         let root = std::env::temp_dir().join(format!(

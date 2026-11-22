@@ -2450,6 +2450,7 @@ mod tests {
         surface.kill();
     }
 
+    #[cfg_attr(windows, ignore = "asserts POSIX paths")]
     #[test]
     fn terminal_reads_match_catalog_shapes_and_preserve_argv_boundaries() {
         {

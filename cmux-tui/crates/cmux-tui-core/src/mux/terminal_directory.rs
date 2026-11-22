@@ -113,6 +113,7 @@ mod tests {
             .collect()
     }
 
+    #[cfg_attr(windows, ignore = "asserts POSIX paths")]
     #[test]
     fn cwd_reported_before_terminal_registration_reaches_event_feed() {
         // A new Cloud terminal's shell can print its first prompt, OSC 7

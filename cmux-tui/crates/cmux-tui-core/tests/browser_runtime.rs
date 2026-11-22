@@ -1941,6 +1941,7 @@ fn browser_tab_creation_is_async_and_surfaces_bootstrap_failure() {
     assert!(
         status.contains("Connection refused")
             || status.contains("connection refused")
+            || status.contains("actively refused")
             || status.contains("failed to lookup address information")
             || status.contains("timed out"),
         "{status}"

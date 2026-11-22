@@ -254,6 +254,7 @@ fn websocket_pairing_is_approved_over_trusted_unix_and_credential_reconnects() {
     server::cleanup(&socket_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/cat")]
 #[test]
 fn websocket_streams_subscribe_and_attach_and_survives_unclean_disconnect() {
     let mux = Mux::new("ws-streams", SurfaceOptions::default());
@@ -314,6 +315,7 @@ fn websocket_streams_subscribe_and_attach_and_survives_unclean_disconnect() {
     mux.shutdown();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/cat")]
 #[test]
 fn websocket_render_attach_carries_large_rgba_state_and_stays_connected() {
     let mux = Mux::new("ws-large-render", SurfaceOptions::default());
@@ -417,6 +419,7 @@ fn websocket_subscriber_receives_cross_connection_event_without_poll_delay() {
     mux.shutdown();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/cat")]
 #[test]
 fn clients_list_identify_resize_and_detach_across_transports() {
     let mux = Mux::new("client-presence", SurfaceOptions::default());
@@ -585,6 +588,7 @@ fn clients_list_identify_resize_and_detach_across_transports() {
     server::cleanup(&socket_path);
 }
 
+#[cfg_attr(windows, ignore = "binds 0.0.0.0 and hangs on Windows (likely Windows Firewall); needs investigation")]
 #[test]
 fn websocket_non_loopback_bind_requires_and_accepts_explicit_insecure_opt_in() {
     let mux = Mux::new("ws-bind", SurfaceOptions::default());

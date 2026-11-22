@@ -23061,6 +23061,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(windows, ignore = "durable terminal-host lifecycle is Unix-only (terminals stay running after reopen)")]
     #[test]
     fn persistent_mux_restart_restores_auxiliary_resources_and_exact_replay() {
         let root = std::env::temp_dir().join(format!(
@@ -25791,6 +25792,7 @@ mod tests {
         assert!(!events.try_iter().any(|event| matches!(event, MuxEvent::TreeChanged)));
     }
 
+    #[cfg_attr(windows, ignore = "durable terminal-host lifecycle is Unix-only (terminals stay running after reopen)")]
     #[test]
     fn raw_and_resource_agent_reports_share_durable_order_across_restart() {
         let root = std::env::temp_dir()
@@ -27842,6 +27844,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(windows, ignore = "durable terminal-host lifecycle is Unix-only (terminals stay running after reopen)")]
     #[test]
     fn new_non_hook_session_can_start_after_hook_session_end() {
         let root = std::env::temp_dir()
@@ -32205,6 +32208,7 @@ mod tests {
             assert_eq!(state.workspaces[1].key, "018f6e21-7b70-7e70-8000-000000001004");
             assert!(state.workspaces.iter().all(|workspace| workspace.screens.is_empty()));
         });
+        drop(recovered);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -34166,6 +34170,7 @@ mod tests {
         mux.shutdown();
     }
 
+    #[cfg_attr(windows, ignore = "asserts POSIX paths")]
     #[test]
     fn new_terminal_inherits_the_selected_hosted_terminals_reported_cwd() {
         let mux = test_mux();

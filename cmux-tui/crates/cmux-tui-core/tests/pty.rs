@@ -132,6 +132,7 @@ fn assert_vt_state_size(
     assert_eq!(response["data"]["rows"], expected.1);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn surface_runs_command_and_screen_updates() {
     let mux = Mux::new("test-pty", shell_opts("printf 'marker-42\\n'; sleep 30"));
@@ -162,6 +163,7 @@ fn surface_runs_command_and_screen_updates() {
     mux.close_surface(surface.id).unwrap();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn surface_resize_reports_whether_the_size_changed() {
     let mux = Mux::new(unique_session("test-resize-bool"), shell_opts("sleep 30"));
@@ -179,6 +181,7 @@ fn surface_resize_reports_whether_the_size_changed() {
     mux.close_surface(surface.id).unwrap();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn headless_creation_uses_explicit_or_authoritative_client_size() {
     let mux = Mux::new(unique_session("test-headless-client-size"), shell_opts("sleep 30"));
@@ -282,6 +285,7 @@ fn headless_creation_uses_explicit_or_authoritative_client_size() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn terminal_surface_follows_the_latest_view_and_never_freezes() {
     let mux = Mux::new("terminal-geometry-authority", SurfaceOptions::default());
@@ -314,6 +318,7 @@ fn terminal_surface_follows_the_latest_view_and_never_freezes() {
     mux.shutdown();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn surface_exit_detaches_terminal_view_and_emits_event() {
     let opts =
@@ -341,6 +346,7 @@ fn surface_exit_detaches_terminal_view_and_emits_event() {
     mux.shutdown();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_round_trip() {
     let mux =
@@ -591,6 +597,7 @@ fn process_info_reports_live_foreground_cwd() {
     std::fs::remove_dir(&target).unwrap();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_read_screen_reports_rendered_viewport_after_scrollback_clear() {
     let mut output = String::new();
@@ -630,6 +637,7 @@ fn control_socket_read_screen_reports_rendered_viewport_after_scrollback_clear()
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_wait_for_matches_one_shot_output_already_on_screen() {
     let mux = Mux::new(
@@ -719,6 +727,7 @@ fn control_socket_set_default_colors_merges_fields() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_attach_vt_state_includes_effective_colors() {
     let mux = Mux::new(unique_session("test-attach-colors"), shell_opts("cat"));
@@ -765,6 +774,7 @@ fn control_socket_attach_vt_state_includes_effective_colors() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_attach_serializes_kitty_aliases_on_initial_and_resize_replay() {
     let mux = Mux::new(unique_session("test-attach-kitty-aliases"), shell_opts("cat"));
@@ -836,6 +846,7 @@ fn control_socket_attach_serializes_kitty_aliases_on_initial_and_resize_replay()
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_attach_vt_state_reports_builtin_cursor_without_config() {
     let mux = Mux::new(unique_session("test-attach-cursor-null"), shell_opts("cat"));
@@ -858,6 +869,7 @@ fn control_socket_attach_vt_state_reports_builtin_cursor_without_config() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_attach_vt_state_reports_authoritative_cursor_before_replay() {
     let mux = Mux::new(unique_session("test-attach-cursor-override"), shell_opts("cat"));
@@ -886,6 +898,7 @@ fn control_socket_attach_vt_state_reports_authoritative_cursor_before_replay() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_attach_stream_receives_merged_colors_changed() {
     let mux = Mux::new(
@@ -958,6 +971,7 @@ fn control_socket_attach_stream_receives_merged_colors_changed() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_attach_palette_is_full_sparse_state_and_reset_clears_all_256() {
     let mux = Mux::new(unique_session("test-attach-palette"), shell_opts("cat"));
@@ -1007,6 +1021,7 @@ fn control_socket_attach_palette_is_full_sparse_state_and_reset_clears_all_256()
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn control_socket_broadcasts_surface_resized_once_per_changed_size() {
     let mux = Mux::new(unique_session("test-resize-event"), shell_opts("sleep 30"));
@@ -1106,6 +1121,7 @@ fn control_socket_broadcasts_surface_resized_once_per_changed_size() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn default_colors_apply_to_existing_and_future_surfaces() {
     let opts = SurfaceOptions { command: Some(vec!["/bin/cat".to_string()]), ..Default::default() };
@@ -1142,6 +1158,7 @@ fn default_colors_apply_to_existing_and_future_surfaces() {
     mux.close_surface(second.id).unwrap();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn attach_stream_replays_then_streams_without_duplication() {
     let mux = Mux::new(
@@ -1207,6 +1224,7 @@ fn attach_stream_replays_then_streams_without_duplication() {
     mux.close_surface(surface.id).unwrap();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn default_byte_attach_replays_preexisting_kitty_image() {
     let mux = Mux::new(unique_session("test-attach-kitty"), shell_opts("cat"));
@@ -1232,6 +1250,7 @@ fn default_byte_attach_replays_preexisting_kitty_image() {
     let _ = mux.close_surface(surface.id);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn byte_attach_between_transmit_and_place_keeps_the_unplaced_image() {
     let mux = Mux::new(unique_session("test-attach-unplaced-kitty"), shell_opts("cat"));
@@ -1256,6 +1275,7 @@ fn byte_attach_between_transmit_and_place_keeps_the_unplaced_image() {
     let _ = mux.close_surface(surface.id);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn attach_and_resize_replays_restore_the_osc_title() {
     let mux = Mux::new(unique_session("test-attach-osc-title"), shell_opts("cat"));
@@ -1311,6 +1331,7 @@ fn attach_and_resize_replays_restore_the_osc_title() {
     assert_eq!(resized.title().as_deref(), Some("renamed tab"));
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn attach_resize_replay_preserves_an_inflight_kitty_transmission() {
     let mux = Mux::new(unique_session("test-attach-inflight-kitty"), shell_opts("cat"));
@@ -1384,6 +1405,7 @@ fn attach_resize_replay_preserves_an_inflight_kitty_transmission() {
     let _ = mux.close_surface(surface.id);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn render_attach_snapshot_contains_preexisting_kitty_image() {
     let mux = Mux::new(unique_session("test-render-attach-kitty"), shell_opts("cat"));
@@ -1414,6 +1436,7 @@ fn render_attach_snapshot_contains_preexisting_kitty_image() {
     let _ = mux.close_surface(surface.id);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn render_attach_initial_snapshot_includes_unplaced_image_for_later_placement() {
     let mux = Mux::new(unique_session("test-render-attach-unplaced-kitty"), shell_opts("cat"));
@@ -1433,6 +1456,7 @@ fn render_attach_initial_snapshot_includes_unplaced_image_for_later_placement() 
     let _ = mux.close_surface(surface.id);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn byte_attach_cursor_snapshot_does_not_fan_out_a_render_frame() {
     let mux = Mux::new(unique_session("test-attach-no-render-fanout"), shell_opts("cat"));
@@ -1445,6 +1469,7 @@ fn byte_attach_cursor_snapshot_does_not_fan_out_a_render_frame() {
     mux.close_surface(surface.id).unwrap();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn attach_stream_orders_resize_between_output_frames() {
     let mux = Mux::new(
@@ -1509,6 +1534,7 @@ fn attach_stream_orders_resize_between_output_frames() {
     mux.close_surface(surface.id).unwrap();
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn render_attach_headless_fans_one_frame_to_render_and_byte_consumers() {
     let mux = Mux::new(
@@ -1611,6 +1637,7 @@ fn render_attach_headless_fans_one_frame_to_render_and_byte_consumers() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn render_attach_snapshot_and_raced_write_have_no_gap_or_duplicate_frame() {
     let mux = Mux::new(unique_session("test-render-race"), shell_opts("stty -echo; cat"));
@@ -1654,6 +1681,7 @@ fn render_attach_snapshot_and_raced_write_have_no_gap_or_duplicate_frame() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn render_attach_resize_is_a_full_replacement_at_the_new_size() {
     let mux = Mux::new(unique_session("test-render-resize"), shell_opts("cat"));
@@ -1732,6 +1760,7 @@ fn render_attach_resize_is_a_full_replacement_at_the_new_size() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn read_scrollback_pages_oldest_rows_and_clamps_bounds() {
     let script =
@@ -1797,6 +1826,7 @@ fn read_scrollback_pages_oldest_rows_and_clamps_bounds() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn tree_event_modes_receive_delta_or_exact_coarse_fallback() {
     let mux = Mux::new(unique_session("test-tree-event-modes"), shell_opts("sleep 30"));
@@ -1888,6 +1918,7 @@ fn tree_event_modes_receive_delta_or_exact_coarse_fallback() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn create_empty_workspace_is_visible_and_materialized_in_place() {
     let mux = Mux::new(unique_session("test-empty-workspace"), shell_opts("sleep 30"));
@@ -2138,6 +2169,7 @@ fn frontend_projection_round_trips_without_advancing_workspace_revision() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn send_paste_wraps_only_while_dec_mode_2004_is_enabled() {
     let script = "stty -echo -icanon min 1 time 0; printf 'paste-ready\\n'; od -An -tx1 -N 14; od -An -tx1 -N 3; sleep 30";
@@ -2234,6 +2266,7 @@ fn send_paste_wraps_only_while_dec_mode_2004_is_enabled() {
     cmux_tui_core::server::cleanup(&sock_path);
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn new_tab_on_empty_headless_session_creates_workspace() {
     // A headless session receives new-tab before any workspace exists;

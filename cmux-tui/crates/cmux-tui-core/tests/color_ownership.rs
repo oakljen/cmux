@@ -109,6 +109,7 @@ impl Drop for ColorFixture {
     }
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn color_ownership_shared_defaults_are_separate_on_live_resize_and_reattach() {
     let fixture = ColorFixture::new();
@@ -147,6 +148,7 @@ fn color_ownership_shared_defaults_are_separate_on_live_resize_and_reattach() {
     }
 }
 
+#[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
 #[test]
 fn color_ownership_same_valued_osc_survives_defaults_and_resets_per_terminal() {
     let fixture = ColorFixture::new();

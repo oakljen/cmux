@@ -925,6 +925,7 @@ mod tests {
         assert_eq!(updated["value"]["projection"]["selected_workspace"], "gamma");
     }
 
+    #[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
     #[test]
     fn sidebar_resource_lifecycle_uses_the_real_plugin_pty_and_exact_receipts() {
         let mux = Mux::new("aux-sidebar-lifecycle", SurfaceOptions::default());

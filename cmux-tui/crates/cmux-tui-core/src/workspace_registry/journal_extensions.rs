@@ -3337,6 +3337,7 @@ mod tests {
 
     /// A put of a `terminal_output` hook committed before output left the
     /// journal still replays its receipt; a new one is refused.
+    #[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
     #[test]
     fn a_retired_terminal_output_hook_replays_its_receipt_and_new_ones_are_refused() {
         let mut registry = WorkspaceRegistry::in_memory("retired-hook-field").unwrap();
@@ -3363,6 +3364,7 @@ mod tests {
         assert!(error.to_string().contains("terminal_output is retired"), "{error:#}");
     }
 
+    #[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
     #[test]
     fn journal_hook_states_exclude_disabled_manifest_history() {
         let mut registry = WorkspaceRegistry::in_memory("active-hooks").unwrap();
