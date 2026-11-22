@@ -33,7 +33,20 @@
 
 > This fork of [manaflow-ai/cmux](https://github.com/manaflow-ai/cmux) by **Manaflow, Inc.** adds Windows and Linux build support for `cmux-tui`, the Rust terminal multiplexer in this repo. The macOS app above is upstream's work and still macOS-only. Terminal engine: [Ghostty](https://github.com/ghostty-org/ghostty) by Mitchell Hashimoto and contributors. Not affiliated with or endorsed by Manaflow. See [cmux-tui/docs/ATTRIBUTION-PORT.md](cmux-tui/docs/ATTRIBUTION-PORT.md).
 
-**Build** (installs Rust, Zig and libclang locally):
+**Install (no build needed):** download the latest package from the
+[Releases page](https://github.com/oakljen/cmux/releases):
+
+| Platform | File | Notes |
+| --- | --- | --- |
+| Windows 10/11 | `cmux_*_x64-setup.exe` | Not code-signed, so SmartScreen warns: "More info" > "Run anyway". Needs the WebView2 runtime (built into Windows 11). |
+| Debian / Ubuntu | `cmux_*_amd64.deb` | `sudo apt install ./cmux_*_amd64.deb` |
+| Any Linux | `cmux_*.AppImage` | `chmod +x` it and run |
+| Terminal only | `cmux-tui-windows-x64.zip`, `cmux-tui-linux-x64.tar.gz` | The server and TUI without the window |
+
+Check downloads against `SHA256SUMS`. The desktop app is a native window around the web UI and starts its own server;
+see [cmux-tui/frontends/desktop](cmux-tui/frontends/desktop/README.md).
+
+**Build from source** (installs Rust, Zig and libclang locally):
 
 ```powershell
 # Windows (PowerShell). Needs git, Python, Visual Studio Build Tools
