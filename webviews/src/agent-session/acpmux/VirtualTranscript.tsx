@@ -89,6 +89,7 @@ import {
 } from "./conversation/followChase";
 import { shareFrameBudget, type FrameBudget, rowsMoved } from "./conversation/frameBudget";
 import { chatRenderPipeline } from "./chatRenderPipeline.experiment";
+import { rowFrameStyle, settledBefore, settledRowHeight } from "./conversation/settledRowSkip";
 import { followMotion } from "./conversation/followMotion.experiment";
 import { composerDockMotion } from "./composer/dockMotion.experiment";
 import { acpmuxPerf, type MountedSpan } from "./perf";
@@ -688,12 +689,8 @@ const RowFrame = React.memo(function RowFrame({
       // from the thread's padding edge, not where an unset one sat, so it adds the padding.
       // Large CSS numeric offsets lose fractional bits in WebKit. Keep the integer offset and
       // its subpixel remainder separate so animated row heights remain adjacent in long chats.
-      style={{
-        top: integralTop,
-        marginTop: placedTop - integralTop,
-        contentVisibility: intrinsicHeight === undefined ? undefined : "auto",
-        containIntrinsicBlockSize: intrinsicHeight === undefined ? undefined : `auto ${intrinsicHeight}px`,
-      }}
+      // A settled row may hold its indexed height while the browser skips it (settledRowSkip.ts).
+      style={rowFrameStyle(integralTop, placedTop, intrinsicHeight)}
       onFocus={() => onFocus(row.id)}
     >
       {/* The row's own trailing gap is the only row-local empty surface owned by transcript selection.
@@ -878,7 +875,10 @@ type RowFrameSources = {
 type RowFramesView = {
   rows: readonly AcpmuxRow[];
   mountedRanges: readonly { first: number; last: number }[];
+  /// The chat render pipeline experiment (settledRowSkip.ts): settled rows hold their indexed height
+  /// while the browser skips them off screen. Rows above `settledBefore` are settled by position.
   skipSettledRows: boolean;
+  settledBefore: number;
   geometry: { topAt(index: number): number; gapAt(index: number): number; heightAt(index: number): number };
   frameKey: string;
   registry: NativeRegistry;
@@ -968,14 +968,7 @@ function drawRowFrames(cache: RowFrameCache, sources: RowFrameSources, view: Row
       const inputs = cache.scratch;
       inputs.index = absoluteIndex;
       inputs.top = geometry.topAt(absoluteIndex);
-      inputs.intrinsicHeight =
-        view.skipSettledRows &&
-        !row.streaming &&
-        !row.live &&
-        !row.pending &&
-        (row.settled || row.turnEnded || row.ended || row.kind === WORKED || row.kind === "turnSummary")
-          ? geometry.heightAt(absoluteIndex)
-          : undefined;
+      inputs.intrinsicHeight = settledRowHeight(view.skipSettledRows, row, absoluteIndex, view.settledBefore, geometry);
       inputs.gapBelow = absoluteIndex + 1 < rows.length ? geometry.gapAt(absoluteIndex + 1) : 0;
       inputs.expanded = isExpanded;
       inputs.active = view.activeRowId === row.id;
@@ -2098,10 +2091,12 @@ function TranscriptView({
   /// The follow motion's arm (followMotion.experiment.ts), read once per transcript. Every arm but
   /// `eased` (followGlide, the view before) chases each move of the rows in view (followChase.ts).
   const [followArm] = useState(() => experimentArm(followMotion));
-  /// Jump up's arm (jumpUp.experiment.ts), read once per transcript: `off` (the default) draws no
-  /// Jump up and keeps no place for it on a scroll.
+  /// The chat render pipeline's arm (chatRenderPipeline.experiment.ts), read once per transcript, or
+  /// its setting (`experiments.chat_render_pipeline`): `off` (the default) changes no row.
   const [pipelineArm] = useState(() => experimentArm(chatRenderPipeline));
   const skipSettledRows = useChatRenderPipeline() || pipelineArm === "on";
+  /// Jump up's arm (jumpUp.experiment.ts), read once per transcript: `off` (the default) draws no
+  /// Jump up and keeps no place for it on a scroll.
   const [jumpUpOn] = useState(() => experimentArm(jumpUpButton) === "on");
   const chasing = followArm !== "eased";
   /// The `send` arm (the product's): only a send's rise chases; a reply streaming, a row arriving
@@ -7418,8 +7413,10 @@ function TranscriptView({
   // leave nothing behind. A row's own mount effect runs before the sweep, so it reads the length as
   // of the last commit; when this commit changed it, the sweep that follows writes every row anyway.
   const setSizeRef = useRef(setSize);
+  const rowsSettledBefore = useMemo(() => settledBefore(rows, skipSettledRows), [rows, skipSettledRows]);
   const rowFrames = drawRowFrames(rowFrameCache, rowFrameSources, {
     skipSettledRows,
+    settledBefore: rowsSettledBefore,
     rows,
     mountedRanges,
     geometry: layout.geometry,
