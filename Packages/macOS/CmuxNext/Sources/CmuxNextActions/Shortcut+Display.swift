@@ -38,6 +38,42 @@ extension Shortcut {
         }
     }
 
+    /// What a keycap prints for `cap`, as a Mac keyboard labels its keys: modifiers keep their glyphs
+    /// (⌘ ⌥ ⌃ ⇧), the named keys read as words ("return", "tab", "esc", "delete"), every other key as
+    /// it is. Leo 2026-11-22: "this command palette's icons are really bad and not even properly
+    /// depicting the keys"; a lone ↩ or ⇥ on a small cap read as an arrow, not a key.
+    public nonisolated static func keycapLegend(_ cap: String) -> String {
+        switch cap {
+        case "↩", "⏎", "↵", "⌅", returnKey: "return"
+        case "⇥", tabKey: "tab"
+        case "⎋", "Esc", "ESC", escapeKey: "esc"
+        case "⌫", "⌦", deleteKey, "\u{7F}": "delete"
+        default: cap
+        }
+    }
+
+    /// Whether `cap` is a modifier's glyph: a shortcut's stroke runs through its modifiers to the first
+    /// other key, so in `["⌘", "J", "S"]` (a chord) the S starts a second stroke.
+    public nonisolated static func isModifierKeycap(_ cap: String) -> Bool {
+        ["⌃", "⌥", "⇧", "⌘", "fn"].contains(cap)
+    }
+
+    /// `caps` split into the strokes pressed one after another: `[["⌘", "J"], ["S"]]` for the chord ⌘J
+    /// then S, one stroke for `["⇧", "⌘", "P"]`.
+    public nonisolated static func keycapStrokes(_ caps: [String]) -> [[String]] {
+        var strokes: [[String]] = []
+        var current: [String] = []
+        for cap in caps {
+            current.append(cap)
+            if !isModifierKeycap(cap) {
+                strokes.append(current)
+                current = []
+            }
+        }
+        if !current.isEmpty { strokes.append(current) }
+        return strokes
+    }
+
     /// Separate keycaps, for rendering one badge per key: `["⇧", "⌘", "P"]`.
     public var keycaps: [String] { modifierGlyphs + [keyGlyph] }
 
