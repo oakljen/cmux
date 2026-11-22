@@ -16,6 +16,12 @@ private typealias AnnotatedCopy = @convention(c) (AnyObject, Selector, NSRange, 
 private let annotatedCopySelector = NSSelectorFromString("annotatedSubstringForProposedRange:actualRange:")
 private let appKitAnnotatedCopy = unsafeBitCast(class_getMethodImplementation(NSTextView.self, annotatedCopySelector), to: AnnotatedCopy.self)
 
+/// Whether UNIT ends a paragraph for `NSString.paragraphRange(for:)`: LF, CR and U+2029, CRLF as one (not NEL,
+/// U+2028, form feed or vertical tab; probe on macOS 27, cmux21). UTF-16 units, not characters: a CRLF is one
+/// character, and `rangeOfCharacter(from:)` mis-found it, and a separator before a range that ends inside a
+/// surrogate pair.
+private func isParagraphSeparator(_ unit: unichar) -> Bool { unit == 0x0A || unit == 0x0D || unit == 0x2029 }
+
 /// The span of a long paragraph that text checking reads around a range.
 struct FieldCheckingSpan {
     /// A paragraph longer than this (UTF-16 units) is read around the range only.
@@ -25,7 +31,9 @@ struct FieldCheckingSpan {
     /// The furthest the span widens to reach a word boundary.
     let wordSlack: Int
 
-    init(longParagraph: Int = 1024, radius: Int = 256, wordSlack: Int = 64) {
+    /// The checks a key runs (autocorrection, text replacement, quote and dash substitution, candidates) read a
+    /// few words either side of the caret: 128 units, then up to 64 more to a word boundary.
+    init(longParagraph: Int = 1024, radius: Int = 128, wordSlack: Int = 64) {
         self.longParagraph = longParagraph
         self.radius = radius
         self.wordSlack = wordSlack
@@ -33,16 +41,57 @@ struct FieldCheckingSpan {
 
     /// The span text checking reads for `proposed` in `text`, or nil when NSTextView's answer stands: a proposal of
     /// the whole document (`NSNotFound`), one outside the text, or one in a paragraph no longer than `longParagraph`.
+    ///
+    /// The paragraph's ends are looked for no further than `longParagraph` units from the range: a key reads the
+    /// words around its caret, not its whole paragraph (`paragraphRange(for:)` walked all of it, four or five times
+    /// a key).
     func range(proposed: NSRange, in text: NSString) -> NSRange? {
         guard proposed.location != NSNotFound, proposed.location <= text.length else { return nil }
         let clamped = NSRange(location: proposed.location, length: min(proposed.length, text.length - proposed.location))
-        let paragraph = text.paragraphRange(for: clamped)
-        guard paragraph.length > longParagraph else { return nil }
-        let lo = max(paragraph.location, clamped.location - radius)
-        let hi = min(NSMaxRange(paragraph), NSMaxRange(clamped) + radius)
-        let start = widen(lo, by: -1, in: text, limit: paragraph.location)
-        let end = widen(hi, by: 1, in: text, limit: NSMaxRange(paragraph))
-        return NSRange(location: start, length: end - start)
+        let reach = longParagraph + 1
+        let back = max(0, clamped.location - reach)
+        // A range that starts between the CR and LF of a CRLF starts in the paragraph that CRLF ends.
+        var upTo = clamped.location
+        if upTo > 0, upTo < text.length, text.character(at: upTo - 1) == 0x0D, text.character(at: upTo) == 0x0A { upTo -= 1 }
+        // The paragraph's start: after the last separator before the range, or nil when it is further than REACH.
+        var start: Int? = back == 0 ? 0 : nil
+        if let i = lastSeparator(in: text, NSRange(location: back, length: max(0, upTo - back))) { start = i + 1 }
+        // Its end: after the range's own last character when that ends the paragraph, else after the first
+        // separator from the range's end (CRLF whole), or nil past REACH.
+        let from = NSMaxRange(clamped), ahead = min(text.length, from + reach)
+        var end: Int? = ahead == text.length ? text.length : nil
+        var stop: Int?
+        if clamped.length > 0, isParagraphSeparator(text.character(at: from - 1)) { stop = from - 1 }
+        else { stop = firstSeparator(in: text, NSRange(location: from, length: ahead - from)) }
+        if let stop {
+            let crlf = text.character(at: stop) == 0x0D && stop + 1 < text.length && text.character(at: stop + 1) == 0x0A
+            end = stop + 1 + (crlf ? 1 : 0)
+        }
+        if let start, let end, end - start <= longParagraph { return nil }
+        let lowest = start ?? 0, highest = end ?? text.length
+        let lo = max(lowest, clamped.location - radius)
+        let hi = min(highest, NSMaxRange(clamped) + radius)
+        let first = widen(lo, by: -1, in: text, limit: lowest)
+        let last = widen(hi, by: 1, in: text, limit: highest)
+        return NSRange(location: first, length: last - first)
+    }
+
+    /// The index of the last paragraph separator in RANGE of TEXT, or nil (its units read once, on the stack).
+    private func lastSeparator(in text: NSString, _ range: NSRange) -> Int? {
+        guard range.length > 0 else { return nil }
+        return withUnsafeTemporaryAllocation(of: unichar.self, capacity: range.length) { units in
+            text.getCharacters(units.baseAddress!, range: range)
+            return units.lastIndex(where: isParagraphSeparator).map { range.location + $0 }
+        }
+    }
+
+    /// The index of the first paragraph separator in RANGE of TEXT, or nil.
+    private func firstSeparator(in text: NSString, _ range: NSRange) -> Int? {
+        guard range.length > 0 else { return nil }
+        return withUnsafeTemporaryAllocation(of: unichar.self, capacity: range.length) { units in
+            text.getCharacters(units.baseAddress!, range: range)
+            return units.firstIndex(where: isParagraphSeparator).map { range.location + $0 }
+        }
     }
 
     /// `index` moved in `step` direction to the nearest white space, at most `wordSlack` units and never past `limit`.
