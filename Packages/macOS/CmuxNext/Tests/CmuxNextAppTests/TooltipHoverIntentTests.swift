@@ -141,7 +141,7 @@ import CmuxNextWakeupsTestSupport
     /// (a titled button, a label). A shortcut still shows, as a page's `data-tooltip-shortcut` does.
     @Test func aControlThatShowsItsOwnTextShowsNoTooltip() async throws {
         let clock = ManualClock()
-        let (window, _, presenter) = Self.toolbar(clock: clock)
+        let (window, buttons, presenter) = Self.toolbar(clock: clock)
         defer {
             presenter.dismiss()
             window.closeAfterTest()
@@ -156,9 +156,11 @@ import CmuxNextWakeupsTestSupport
         label.themedToolTip = "~/fun/cmux on main"
         for view in [button, label] as [NSView] {
             presenter.enter(try Self.tracker(view))
-            for _ in 0..<10 {
-                try await Self.settle()
-                clock.advance(by: .milliseconds(100))
+            // A tooltip for it would start the hover delay: run any delay out, past the first delay, then look. With
+            // none, nothing waits on the clock (waitForSleeper gives up after its bound).
+            if (try? await clock.waitForSleeper()) != nil {
+                clock.advance(by: .milliseconds(2_000))
+                try await Self.settle(until: { presenter.shown != nil })
             }
             try await Self.settle()
             #expect(presenter.shown == nil, "\(type(of: view)) showing its own text showed \(presenter.shown?.text ?? "")")
@@ -172,6 +174,13 @@ import CmuxNextWakeupsTestSupport
         clock.advance(by: .milliseconds(2_000))
         try await Self.settle(until: { presenter.shown != nil })
         #expect(presenter.shown?.shortcut == "⌘R")
+        presenter.exit(try Self.tracker(button))
+        // The same steps show an icon-only control's tooltip (warm now, so maybe with no delay): the check above
+        // could see one.
+        presenter.enter(try Self.tracker(buttons[0]))
+        if (try? await clock.waitForSleeper()) != nil { clock.advance(by: .milliseconds(2_000)) }
+        try await Self.settle(until: { presenter.shown?.text == "Back" })
+        #expect(presenter.shown?.text == "Back")
     }
 
     /// A titled button inside a view with its own tooltip: the button's label
