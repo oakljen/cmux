@@ -86,6 +86,8 @@ extension FloatingGlassStyle {
                                                          darkRim: (0.24, 0.04), lightRim: (0.75, 0.08), castsShadow: false)
     /// Toasts share the transient material without changing the held chat appearance.
     nonisolated public static let toast = FloatingGlassStyle.transient
+    /// The find pill's glass (red-test stub: the transient material unchanged).
+    nonisolated public static var findPill: FloatingGlassStyle { .transient }
     /// Dialogs, confirms, prompt bars and sheets: a little denser veil for longer text.
     nonisolated public static let dialog = FloatingGlassStyle(cornerDepth: 0, darkVeilAlpha: 0.48, lightVeilAlpha: 0.62,
                                                          darkRim: (0.28, 0.05), lightRim: (0.85, 0.1), castsShadow: true)
