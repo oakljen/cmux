@@ -15,8 +15,9 @@ public final class CloudLastSeenMachines {
 
     private let dir: String?
     private let defaults: UserDefaults
-    /// The rows and account last written, so a picker reading every few seconds writes only on a change.
-    private var written: (account: [String?], machines: [AgentPaneCloudMachines.Machine])?
+    /// The rows and account last written and when, so a picker reading every few seconds writes only on a change,
+    /// or once an hour to keep an app left running from aging out its own list.
+    private var written: (account: [String?], machines: [AgentPaneCloudMachines.Machine], at: Date)?
     /// The last write: each write waits for the one before, so the newest list is the one on disk.
     private var saving: Task<Void, Never>?
     /// The fresh read a kept list's answer started; one at a time, cancelled at sign-out.
@@ -55,9 +56,10 @@ public final class CloudLastSeenMachines {
     /// Keeps `machines`, a list the server answered for `account` just now. Off the main thread.
     public func keep(_ machines: [AgentPaneCloudMachines.Machine], for account: [String?]) {
         guard let dir, let user = account.first ?? nil, !user.isEmpty else { return }
-        if let written, written.account == account, written.machines == machines { return }
-        written = (account, machines)
-        let request = Save(dir: dir, user: user, team: account.count > 1 ? account[1] : nil, at: Self.ms(.now), machines: machines.map(Self.row))
+        let now = Date.now
+        if let written, written.account == account, written.machines == machines, now.timeIntervalSince(written.at) < 3600 { return }
+        written = (account, machines, now)
+        let request = Save(dir: dir, user: user, team: account.count > 1 ? account[1] : nil, at: Self.ms(now), machines: machines.map(Self.row))
         let previous = saving
         saving = Task.detached(priority: .utility) {
             await previous?.value
