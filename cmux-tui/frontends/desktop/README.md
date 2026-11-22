@@ -53,7 +53,25 @@ Set `CMUX_TUI_BIN=/path/to/cmux-tui` to use a different server binary.
 
 ## Status
 
-Verified on Windows 11: window launches, auto-connects, shows a live PowerShell,
-renders output, and cleans up on close and on force-kill. Not yet verified:
-Linux GUI run, installers/bundles, keyboard input inside the native window
-(upstream's web tests cover input), browser surfaces (upstream follow-up).
+Verified on **Windows 11**: window launches, auto-connects, shows a live
+PowerShell, renders output, and cleans up on close and on force-kill. The NSIS
+installer builds (about 9 MB; app 8.5 MB plus a 25 MB `cmux-tui`).
+
+Verified on **Linux** (Ubuntu 24.04 under WSL2/WSLg): the app compiles, bundles a
+`.deb`, starts the server on a loopback port with its first terminal, and the
+server is reaped when the app is killed. The window itself was not inspected on
+Linux, and installers other than the Windows NSIS setup and the `.deb` have not
+been tried (AppImage, MSI, macOS).
+
+Not yet verified: keyboard input inside the native window (upstream's web tests
+cover input), browser surfaces (upstream follow-up).
+
+## Troubleshooting
+
+- If `tauri build` crashes with a segfault right at startup, or `rustc` reports
+  `E0786 invalid metadata file`, the build outputs or `node_modules` were
+  probably truncated by a full disk. Free space, delete `node_modules` and
+  `src-tauri/target`, and rebuild. A full Tauri build needs several GB.
+- Windows builds need an MSVC toolset that Zig 0.16's bundled clang accepts
+  (VS 2022, MSVC 14.4x). The newest Visual Studio STL (MSVC 14.52) rejects it
+  with `STL1000`; use VS 2022 Build Tools until Ghostty moves to a newer Zig.
