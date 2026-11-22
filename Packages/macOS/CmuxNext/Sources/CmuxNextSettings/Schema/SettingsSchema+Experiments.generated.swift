@@ -14,6 +14,9 @@ extension CmuxConfigSnapshot {
     /// `experiments.agentBadgesBeam`: Taste build 5's variant: with Agent Badges on, a running sidebar row's edge carries a thin light that laps it (Core Animation, Motion.indicators; still under Reduce Motion), removed when the row stops running or leaves the screen. No effect while Agent Badges is off.
     public nonisolated static let agentBadgesBeamPath = ["experiments", "agentBadgesBeam"]
     public nonisolated static let agentBadgesBeamDefault = false
+    /// `experiments.appsTier`: RFD 0003 (Apps tier, cmuxterm-hq docs/rfd/0003-apps-tier.md): publish a Cloud preview as a kept, versioned app with a stable URL, and list published apps in the sidebar (E-A Publish button on the browser pane, E-C Apps section). The cmux side is `cmux app publish|versions|rollback|ls` (cmux-tui crate cmux-apps); the platform side is cmux-platform /v1/cloud/apps. Off by default; off keeps today's browser pane and sidebar.
+    public nonisolated static let appsTierPath = ["experiments", "appsTier"]
+    public nonisolated static let appsTierDefault = false
 }
 
 /// One group of `SettingsSchema` rows (its own type: the schema type's line budget is per type).
@@ -61,6 +64,16 @@ nonisolated enum ExperimentsSettingsSchema {
                 kind: .toggle,
                 default: .bool(CmuxConfigSnapshot.agentBadgesBeamDefault),
                 keywords: ["experiments", "experimental", "prototype", "agent", "badges", "beam", "light", "running", "border", "edge"]
+            ),
+            SettingDescriptor(
+                CmuxConfigSnapshot.appsTierPath,
+                section: .advanced,
+                group: group,
+                title: SettingsText.keyed("settings.experiments.appsTier", "Publish Previews as Apps"),
+                help: SettingsText.keyed("settings.experiments.appsTier.help", "A Cloud preview can be published as an app with its own versions and a stable address, listed under Apps in the sidebar."),
+                kind: .toggle,
+                default: .bool(CmuxConfigSnapshot.appsTierDefault),
+                keywords: ["experiments", "experimental", "prototype", "apps", "publish", "preview", "cloud", "version"]
             ),
         ]
     }

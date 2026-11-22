@@ -486,7 +486,8 @@
         "experiments.glassToolbarGroups",
         "experiments.composerV2",
         "experiments.agentBadges",
-        "experiments.agentBadgesBeam"
+        "experiments.agentBadgesBeam",
+        "experiments.appsTier"
       ]
     },
     {
