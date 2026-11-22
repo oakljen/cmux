@@ -1,6 +1,9 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
+#[cfg(windows)]
+use uds_windows::UnixStream;
 use std::sync::Mutex;
 use std::sync::mpsc;
 use std::thread;
