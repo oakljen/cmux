@@ -56,7 +56,7 @@ cmux-tui server start --session agents    # headless owner (runs in foreground)
 cmux-tui attach --session agents          # attach from another terminal
 ```
 
-Press `Ctrl-b ?` for shortcuts and `Ctrl-b d` to detach. Windows uses ConPTY and the default shell is `pwsh.exe`. Full details, a scripting smoke test and the current test status are in [cmux-tui/docs/building-windows-linux.md](cmux-tui/docs/building-windows-linux.md). The Windows port is early: the interactive TUI has not been fully exercised yet.
+Press `Ctrl-b ?` for shortcuts and `Ctrl-b d` to detach. Windows uses ConPTY and the default shell is `pwsh.exe`. Full details, a scripting smoke test and the current test status are in [cmux-tui/docs/building-windows-linux.md](cmux-tui/docs/building-windows-linux.md). The Windows port is early. Manually verified on Windows 11 (Windows Terminal, pwsh): rendering, mouse, `Ctrl-b` prefix chords, `Alt` shortcuts, tabs and splits. Browser tabs, agent hooks and remote/relay are untested.
 
 ## Features
 

@@ -85,5 +85,6 @@ product bugs:
   shutdown semantics on Windows.
 - `websocket_transport::websocket_non_loopback_bind_requires_and_accepts_explicit_insecure_opt_in`
   hangs >60 s on Windows. Run integration tests with a timeout.
-- Not yet verified on Windows: browser tabs (CDP), agent hooks, remote/relay, the
-  interactive TUI in a real console.
+- Manually verified on Windows 11 (Windows Terminal, pwsh): interactive TUI
+  rendering, mouse, `Ctrl-b` prefix chords, `Alt` shortcuts, tabs and splits.
+- Not yet verified on Windows: browser tabs (CDP), agent hooks, remote/relay.
