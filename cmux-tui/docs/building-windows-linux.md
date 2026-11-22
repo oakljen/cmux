@@ -60,30 +60,44 @@ cmux-tui --session demo terminal <terminal_id> screen read
 cmux-tui --session demo server stop
 ```
 
-## Test status (baseline, `cargo test -p cmux-pty -p cmux-tui-core`)
+## Windows toolchain note
 
-**Linux (WSL Ubuntu 24.04, running as root):** 1567 passed, 2 failed.
+Zig 0.16 (pinned by Ghostty) bundles a clang that the newest MSVC STL (14.52, VS
+2026) rejects with `STL1000: Unexpected compiler version, expected Clang 22 or
+newer`. Use Visual Studio 2022 Build Tools (MSVC 14.4x). CI pins `windows-2022`
+for this reason.
+
+## Test status (`cargo test -p cmux-pty -p cmux-tui-core`)
+
+**Windows 11:** all suites pass: lib 1303, `browser_runtime` 9, `pty` 3,
+`websocket_transport` 7 passed, 0 failed. Tests that cannot run on Windows are
+`#[cfg_attr(windows, ignore = "<reason>")]` so they stay visible:
+
+- 52 tests that spawn POSIX `/bin/sh`, `/bin/cat`, `/usr/bin/true` or assert POSIX
+  paths (`pty`, `color_ownership`, `websocket_transport`, and parts of the lib).
+- 3 `mux` tests of durable terminal-host lifecycle, which is Unix-only: after a
+  restart, terminals of a restored session are not live on Windows. This is a
+  real feature gap, not just a test issue.
+- `websocket_non_loopback_bind_requires_and_accepts_explicit_insecure_opt_in`
+  binds `0.0.0.0` and hangs on Windows (likely Windows Firewall); not investigated.
+- Occasionally flaky on Windows: `browser::tests::stalled_surface_route_does_not_block_shared_cdp_reader`.
+- On the slow hosted GitHub Windows runner, five timing-sensitive tests (four CDP
+  `browser` tests and `journal_ingress::...producer_deadline_includes_workspace_registry_mutex_admission`)
+  miss their deadlines though they pass locally; the Windows CI job skips them.
+
+**Linux (WSL Ubuntu 24.04, as root):** 1567 passed, 2 failed.
 
 - `workspace_registry::tests::reset_errors_when_state_root_cannot_be_inspected`
-  fails only when run as root (chmod 000 does not block root). Passes as a normal user.
+  fails only as root (chmod 000 does not block root); passes as a normal user.
 - `mux::tests::durable_workspace_creation_supports_the_in_process_terminal_runtime`
-  is flaky under parallel runs (passes alone 3/3).
+  is flaky under parallel runs (passes alone).
+- Under heavy load a few journal-timing tests can fail and then pass on rerun.
 
-**Windows:** the suite compiles; lib tests 1290 passed / 33 failed (before the
-small fixes in this branch). Failures are almost all test-fixture portability, not
-product bugs:
+**Manually verified on Windows 11** (Windows Terminal, pwsh): interactive TUI
+rendering, mouse, `Ctrl-b` prefix chords, `Alt` shortcuts, tabs and splits.
+Not yet verified on Windows: browser tabs (CDP), agent hooks, remote/relay.
 
-- ~25 tests spawn `/bin/sh`, `/bin/cat`, `/usr/bin/true` (CreateProcessW fails;
-  hook validation also rejects `/bin/...` as not absolute). Need a portable
-  helper or `#[cfg(unix)]`.
-- A few tests delete their temp dir while a SQLite handle is still open
-  (Windows error 32). Several fixed here with `drop(...)`; at least
-  `mux::tests::persistent_workspace_registry_recovers_exact_identity_order_and_revision`
-  still fails and may point at a handle held inside `Mux`.
-- `serve_paused_creates_missing_explicit_socket_parent` and
-  `shutting_down_a_writer_clone_unblocks_the_reader` hit `SUN_LEN`/socket
-  shutdown semantics on Windows.
-- `websocket_transport::websocket_non_loopback_bind_requires_and_accepts_explicit_insecure_opt_in`
-  hangs >60 s on Windows. Run integration tests with a timeout.
-- Not yet verified on Windows: browser tabs (CDP), agent hooks, remote/relay, the
-  interactive TUI in a real console.
+## Desktop app
+
+A Tauri desktop shell around the web frontend lives in
+[`../frontends/desktop`](../frontends/desktop/README.md).

@@ -309,6 +309,7 @@ mod tests {
         assert_eq!(value["scroll"]["at_bottom"], false);
     }
 
+    #[cfg_attr(windows, ignore = "uses /bin/cat as a fake plugin")]
     #[test]
     fn fake_plugin_input_reaches_the_styled_render_attachment() {
         let mux = Mux::new("sidebar-resource-fake-plugin", SurfaceOptions::default());

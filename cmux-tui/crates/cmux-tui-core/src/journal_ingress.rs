@@ -2159,7 +2159,11 @@ mod tests {
         shutdown.join().unwrap();
         assert!(returned.is_ok(), "shutdown waited without a limit for an admitted commit");
         drop(mux);
-        std::fs::remove_dir_all(root).unwrap();
+        // Windows refuses to delete files that are still open; cleanup there is best-effort.
+        let removed = std::fs::remove_dir_all(root);
+        if !cfg!(windows) {
+            removed.unwrap();
+        }
     }
 
     #[test]

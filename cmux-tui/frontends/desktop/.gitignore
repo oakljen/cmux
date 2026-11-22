@@ -1,0 +1,6 @@
+node_modules/
+src-tauri/target/
+src-tauri/gen/
+# Sidecar copies are produced by `npm run prepare-sidecar`
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep

@@ -10406,6 +10406,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
     #[test]
     fn pty_eof_publishes_final_render_frame_before_surface_removal() {
         const FINAL_MARKER: &str = "CMUX_FINAL_RENDER_MARKER";

@@ -929,6 +929,7 @@ mod tests {
         assert!(snapshot.get("workspace_key").is_none());
     }
 
+    #[cfg_attr(windows, ignore = "asserts POSIX paths")]
     #[test]
     fn cloud_cwd_snapshot_presents_the_launch_directory_until_the_shell_reports() {
         // https://github.com/manaflow-ai/cmux/issues/10756: the daemon spawned
@@ -959,6 +960,7 @@ mod tests {
         mux.shutdown();
     }
 
+    #[cfg_attr(windows, ignore = "asserts POSIX paths")]
     #[test]
     fn cloud_cwd_snapshot_follows_reported_directory_instead_of_launch_directory() {
         let mux = Mux::new_for_test(
@@ -981,6 +983,7 @@ mod tests {
         mux.shutdown();
     }
 
+    #[cfg_attr(windows, ignore = "asserts POSIX paths")]
     #[test]
     fn cloud_cwd_changes_publish_ordered_terminal_deltas_and_clear_untrusted_reports() {
         let mux = Mux::new_for_test("cloud-cwd-events", SurfaceOptions::default());

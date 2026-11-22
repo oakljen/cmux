@@ -694,6 +694,7 @@ fn next_generation(current: u64) -> u64 {
 mod tests {
     use super::*;
 
+    #[cfg_attr(windows, ignore = "uses /bin/cat as a fake plugin")]
     #[test]
     fn options_reject_empty_or_unsafe_commands() {
         let invalid = JournalPluginOptions {

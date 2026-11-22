@@ -15171,7 +15171,7 @@ mod tests {
 
     #[test]
     fn serve_paused_creates_missing_explicit_socket_parent() {
-        let root = TestSocketDir::create("explicit-runtime-directory-missing");
+        let root = TestSocketDir::create("dir-missing");
         let directory = root.path().join("missing").join("nested");
         let socket = directory.join("mux.sock");
         let pending = serve_paused(test_mux(), Some(socket.clone())).unwrap();
@@ -18134,7 +18134,12 @@ mod tests {
         assert!(disconnect_client(&mux, client, false));
         drop(scheduler);
         drop(mux);
-        std::fs::remove_dir_all(root).unwrap();
+        // Journal workers can hold the file briefly after drop; Windows refuses
+        // to delete open files, so cleanup there is best-effort.
+        let removed = std::fs::remove_dir_all(root);
+        if !cfg!(windows) {
+            removed.unwrap();
+        }
     }
 
     #[test]
@@ -18175,6 +18180,7 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
     #[test]
     fn journal_hook_list_omits_absent_optional_filters() {
         let root = std::env::temp_dir().join(format!(
@@ -18443,7 +18449,11 @@ mod tests {
         assert!(disconnect_client(&mux, client, false));
         drop(scheduler);
         drop(mux);
-        std::fs::remove_dir_all(root).unwrap();
+        // Windows refuses to delete files that are still open; cleanup there is best-effort.
+        let removed = std::fs::remove_dir_all(root);
+        if !cfg!(windows) {
+            removed.unwrap();
+        }
     }
 
     #[test]
@@ -19212,6 +19222,7 @@ mod tests {
         disconnect_client(&mux, client, false);
     }
 
+    #[cfg_attr(windows, ignore = "uses /bin/cat as a fake plugin")]
     #[test]
     fn sidebar_resource_attach_acknowledges_before_styled_snapshot_and_cancels() {
         let mux = Mux::new("server-sidebar-resource", SurfaceOptions::default());
@@ -19944,7 +19955,13 @@ mod tests {
         });
 
         writer.shutdown(Shutdown::Both).unwrap();
-        assert_eq!(finished.recv_timeout(Duration::from_secs(1)).unwrap().unwrap(), 0);
+        // Unix reports EOF; Windows reports WSAESHUTDOWN (10058). Either way the
+        // blocked reader must be released promptly.
+        match finished.recv_timeout(Duration::from_secs(1)).unwrap() {
+            Ok(read) => assert_eq!(read, 0),
+            Err(error) if cfg!(windows) && error.raw_os_error() == Some(10058) => {}
+            Err(error) => panic!("unexpected read error after shutdown: {error}"),
+        }
         read_thread.join().unwrap();
     }
 
@@ -25176,6 +25193,11 @@ mod tests {
             "terminal-wait-new-v1",
             "terminal-exit-status-v1",
         ] {
+            // Bounded clear-history fallback writes are Unix-only by design, so
+            // the key capability is not advertised elsewhere.
+            if expected == CLEAR_HISTORY_KEY_CAPABILITY && !cfg!(unix) {
+                continue;
+            }
             assert!(capabilities.iter().any(|value| value.as_str() == Some(expected)));
         }
     }
@@ -25535,6 +25557,7 @@ mod tests {
         assert_eq!(window_title_osc("a\x1bb\x07c").as_slice(), b"\x1b]0;a b c\x07\x1b]2;a b c\x07");
     }
 
+    #[cfg_attr(windows, ignore = "requires POSIX /bin/sh and coreutils")]
     #[test]
     fn title_changed_event_includes_authoritative_surface_title() {
         let mux = Mux::new(

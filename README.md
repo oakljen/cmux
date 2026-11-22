@@ -29,6 +29,48 @@
   <a href="https://cmux.com/docs/getting-started">Docs</a> · <a href="https://cmux.com/blog">Blog</a> · <a href="https://cmux.com/docs/changelog">Changelog</a> · <a href="https://cmux.com/community">Community</a>
 </p>
 
+## Windows and Linux (community fork)
+
+> This fork of [manaflow-ai/cmux](https://github.com/manaflow-ai/cmux) by **Manaflow, Inc.** adds Windows and Linux build support for `cmux-tui`, the Rust terminal multiplexer in this repo. The macOS app above is upstream's work and still macOS-only. Terminal engine: [Ghostty](https://github.com/ghostty-org/ghostty) by Mitchell Hashimoto and contributors. Not affiliated with or endorsed by Manaflow. See [cmux-tui/docs/ATTRIBUTION-PORT.md](cmux-tui/docs/ATTRIBUTION-PORT.md).
+
+**Install (no build needed):** download the latest package from the
+[Releases page](https://github.com/oakljen/cmux/releases):
+
+| Platform | File | Notes |
+| --- | --- | --- |
+| Windows 10/11 | `cmux_*_x64-setup.exe` | Not code-signed, so SmartScreen warns: "More info" > "Run anyway". Needs the WebView2 runtime (built into Windows 11). |
+| Debian / Ubuntu | `cmux_*_amd64.deb` | `sudo apt install ./cmux_*_amd64.deb` |
+| Any Linux | `cmux_*.AppImage` | `chmod +x` it and run |
+| Terminal only | `cmux-tui-windows-x64.zip`, `cmux-tui-linux-x64.tar.gz` | The server and TUI without the window |
+
+Check downloads against `SHA256SUMS`. The desktop app is a native window around the web UI and starts its own server;
+see [cmux-tui/frontends/desktop](cmux-tui/frontends/desktop/README.md).
+
+**Build from source** (installs Rust, Zig and libclang locally):
+
+```powershell
+# Windows (PowerShell). Needs git, Python, Visual Studio Build Tools
+git clone https://github.com/oakljen/cmux.git; cd cmux
+.\cmux-tui\scriptsuild-windows.ps1
+```
+
+```bash
+# Linux (Debian/Ubuntu)
+git clone https://github.com/oakljen/cmux.git && cd cmux
+./cmux-tui/scripts/build-linux.sh
+```
+
+**Run** (from `cmux-tui/`; binary is `target/debug/cmux-tui` or `cmux-tui.exe`):
+
+```bash
+cmux-tui                                  # open the TUI (session "main")
+cmux-tui --session agents                 # named session
+cmux-tui server start --session agents    # headless owner (runs in foreground)
+cmux-tui attach --session agents          # attach from another terminal
+```
+
+Press `Ctrl-b ?` for shortcuts and `Ctrl-b d` to detach. Windows uses ConPTY and the default shell is `pwsh.exe`. Full details, a scripting smoke test and the current test status are in [cmux-tui/docs/building-windows-linux.md](cmux-tui/docs/building-windows-linux.md). The Windows port is early. Manually verified on Windows 11 (Windows Terminal, pwsh): rendering, mouse, `Ctrl-b` prefix chords, `Alt` shortcuts, tabs and splits. Browser tabs, agent hooks and remote/relay are untested.
+
 ## Features
 
 <table>
