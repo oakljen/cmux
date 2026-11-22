@@ -31,14 +31,23 @@ struct CEFCommitLayoutWait {
     /// evaluation would open a session (and keep the page's renderer from being shared) for a wait the display frames
     /// bound anyway.
     static func pageLaidOut(_ tab: CEFTab, _ pixels: CGSize) async -> Bool {
-        guard tab.runtime.forkFeatures.rendererPaths,
-              let value = try? await tab.evaluate(laidOutScript(pixels), world: .isolated, gesture: .cmux) else { return false }
-        return value == .bool(true)
+        guard tab.runtime.forkFeatures.rendererPaths else { return false }
+        do {
+            let value = try await tab.evaluate(laidOutScript(pixels), world: .isolated, gesture: .cmux)
+            if case .array(let seen) = value, seen.count == 2, case .number(let width) = seen[0], case .number(let height) = seen[1] {
+                // The page never reached the size: what it had, beside what it was asked for (`debug.cef` tracker).
+                CEFHostView.trackerStats.commitLastMiss = [width, height, pixels.width, pixels.height]
+            }
+            return value == .bool(true)
+        } catch {
+            CEFHostView.trackerStats.commitAnswersFailed += 1
+            return false
+        }
     }
 
     /// The page's answer: at each animation frame, whether its viewport is `pixels` in device pixels (page zoom aside:
     /// `innerWidth` is in CSS pixels); once it is, it waits one frame more, so the frame laid out at that size went to
-    /// the compositor. False after 30 frames at another size.
+    /// the compositor. After 30 frames at another size, the size it has, in device pixels (`[width, height]`).
     nonisolated static func laidOutScript(_ pixels: CGSize) -> String {
         let width = Int(pixels.width.rounded()), height = Int(pixels.height.rounded())
         return """
@@ -47,7 +56,7 @@ struct CEFCommitLayoutWait {
             && Math.abs(innerHeight * devicePixelRatio - \(height)) <= devicePixelRatio + 1;
           const frame = () => new Promise(done => requestAnimationFrame(done));
           for (let i = 0; i < 30 && !at(); i++) await frame();
-          if (!at()) return false;
+          if (!at()) return [innerWidth * devicePixelRatio, innerHeight * devicePixelRatio];
           await frame();
           return true;
         })()

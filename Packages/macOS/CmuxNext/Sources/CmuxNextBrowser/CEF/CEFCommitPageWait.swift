@@ -46,9 +46,19 @@ final class CEFCommitPageWait {
         self.release = release
         stopFrames = wait.frames(view) { [weak self] last in self?.frame(last: last) ?? false }
         let laidOut = wait.laidOut
+        let asked = CEFTrackerStats.now()
         answer = Task { [weak self, weak tab] in
-            guard let tab, await laidOut(tab, pixels) else { return }
-            self?.report(.answered)
+            guard let tab else { return }
+            let laid = await laidOut(tab, pixels)
+            // Counted whether or not the wait still runs: an answer that comes after the bound is late, not lost.
+            CEFHostView.trackerStats.commitAnswerSeconds += CEFTrackerStats.now() - asked
+            if !laid { CEFHostView.trackerStats.commitAnswersNo += 1 }
+            guard laid else { return }
+            guard let self, self.owesReport else {
+                CEFHostView.trackerStats.commitAnswersLate += 1
+                return
+            }
+            self.report(.answered)
         }
     }
 
@@ -81,8 +91,6 @@ final class CEFCommitPageWait {
         case .atBound: CEFHostView.trackerStats.commitWaitsAtBound += 1
         case .left: CEFHostView.trackerStats.commitWaitsLeft += 1
         }
-        answer?.cancel()
-        answer = nil
         if release == nil, !inFrame { stop() }
         ready()
     }
