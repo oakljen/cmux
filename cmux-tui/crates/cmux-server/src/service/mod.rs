@@ -10,6 +10,7 @@ mod launchd;
 mod systemd;
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use cmux_server_core::InstallMode;
@@ -311,6 +312,246 @@ pub(crate) fn check_not_shared(_path: &Path, _what: &str) -> Result<()> {
     Ok(())
 }
 
+/// The variables that choose where a cmux daemon keeps its state, and so
+/// its terminal host records (`cmux_tui_platform::workspace_state_dir`),
+/// besides HOME.
+pub(super) const STATE_ENV: [&str; 2] = ["CMUX_TUI_STATE_DIR", "XDG_STATE_HOME"];
+
+/// What uninstall needs to end the terminals of the session service, read
+/// before anything stops: a refusal here changes nothing.
+#[derive(Debug)]
+pub(super) struct Sweep {
+    binary: PathBuf,
+    session: String,
+    /// Each variable as the daemon of the service has it (`None`: unset).
+    env: Vec<(String, Option<OsString>)>,
+}
+
+/// The sweep for the session service, or `None` for the store service.
+/// The state its daemon must use is the state the service's daemon used:
+/// - `daemon`: the pid of the service's daemon while it runs. Its own
+///   environment (HOME and [`STATE_ENV`]) is read, whatever the manager's
+///   environment or a unit drop-in said when it started.
+/// - No daemon runs: HOME of the user database (what launchd and systemd
+///   give the service) and `manager_env`, each variable as the service
+///   manager now gives a service (`None`: unset).
+///
+/// Refuses when no daemon can be started that way: the environment of the
+/// running daemon is unreadable, the binary is gone or another account
+/// could replace it, or the HOME of the user database is unknown.
+pub(super) fn sweep(
+    s: &Services<'_>,
+    daemon: Option<u32>,
+    manager_env: &dyn Fn(&str) -> Result<Option<OsString>>,
+) -> Result<Option<Sweep>> {
+    let Some(host) = &s.session else { return Ok(None) };
+    let binary = PathBuf::from(&host.binary);
+    // The terminal hosts run on after the daemon (they may run this same
+    // file, deleted). Without the file no daemon can adopt and end them.
+    if !binary.is_file() {
+        return Err(Error::rejected(format!(
+            "{} (the cmux binary of the session service) is gone, so cmux cannot end the terminals of session {:?}. Run `cmux server install` to put it back, then run this command again",
+            binary.display(),
+            host.session
+        )));
+    }
+    check_binary(&binary)?;
+    let env = match daemon {
+        Some(pid) => {
+            check_daemon_session(pid, &host.session)?;
+            let theirs = crate::sys::process_environ(pid).map_err(|e| {
+                Error::rejected(format!(
+                    "cmux cannot read the environment of the daemon of session {:?} (pid {pid}: {e}), so it cannot tell which state holds its terminals",
+                    host.session
+                ))
+            })?;
+            // An empty value counts as unset, as the daemon reads it.
+            let get = |key: &str| {
+                theirs.iter().find(|(k, v)| k == key && !v.is_empty()).map(|(_, v)| v.clone())
+            };
+            let home = match get("HOME") {
+                Some(home) => home,
+                None => user_home(s, &host.session)?.into_os_string(),
+            };
+            let mut env = vec![("HOME".to_owned(), Some(home))];
+            env.extend(STATE_ENV.iter().map(|key| ((*key).to_owned(), get(key))));
+            env
+        }
+        None => {
+            let home = user_home(s, &host.session)?.into_os_string();
+            let mut env = vec![("HOME".to_owned(), Some(home))];
+            for key in STATE_ENV {
+                env.push((key.to_owned(), manager_env(key)?));
+            }
+            env
+        }
+    };
+    // A relative path resolves against the working folder: the daemon's,
+    // not this command's. None of them is ever relative as cmux sets them.
+    if let Some((key, value)) = env
+        .iter()
+        .find_map(|(k, v)| v.as_ref().filter(|v| !Path::new(v).is_absolute()).map(|v| (k, v)))
+    {
+        return Err(Error::rejected(format!(
+            "the daemon of session {:?} has {key}={} (a relative path), which cmux cannot follow from here, so it ends no terminals",
+            host.session,
+            value.to_string_lossy()
+        )));
+    }
+    Ok(Some(Sweep { binary, session: host.session.clone(), env }))
+}
+
+/// Which session a cmux terminal belongs to, from the `CMUX_TUI_SOCKET` its
+/// daemon gave it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerminalSession {
+    /// A default socket of `session`.
+    This,
+    /// A default socket of another session.
+    Other,
+    /// Not a default socket path (a daemon run with `--socket` of its own),
+    /// so its session cannot be told.
+    Unknown,
+}
+
+/// The session of the terminal whose daemon listens on `socket`, against
+/// `session`. Default sockets (cmux-tui-platform `platform.rs`, cmux-tui-core
+/// `socket_path.rs`) are `cmux-tui-UID/<session>.sock`, or the SHA-256 of the
+/// name in `cmux-tui-hashed-UID` or `cmux-tui-invalid-UID` when that path
+/// would not fit or the name is not valid. Any other path is `Unknown`.
+pub fn terminal_session(socket: &Path, session: &str) -> TerminalSession {
+    let uid = crate::sys::uid();
+    let (Some(stem), Some(dir)) = (
+        socket.file_stem().and_then(|s| s.to_str()),
+        socket.parent().and_then(|d| d.file_name()).and_then(|d| d.to_str()),
+    ) else {
+        return TerminalSession::Unknown;
+    };
+    if socket.extension().and_then(|e| e.to_str()) != Some("sock") {
+        return TerminalSession::Unknown;
+    }
+    let named = |name: &str| {
+        if name == session { TerminalSession::This } else { TerminalSession::Other }
+    };
+    if dir == format!("cmux-tui-{uid}") {
+        return named(stem);
+    }
+    let hashed =
+        dir == format!("cmux-tui-hashed-{uid}") || dir == format!("cmux-tui-invalid-{uid}");
+    if hashed && stem.len() == 64 && stem.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        let digest = format!("{:x}", Sha256::digest(session.as_bytes()));
+        return if stem == digest { TerminalSession::This } else { TerminalSession::Other };
+    }
+    TerminalSession::Unknown
+}
+
+/// The running daemon serves the session the unit names (`--session S` in
+/// its arguments): the sweep ends the terminals of that session only, and
+/// never takes another daemon's environment for it.
+fn check_daemon_session(pid: u32, session: &str) -> Result<()> {
+    let argv = crate::sys::process_argv(pid).map_err(|e| {
+        Error::rejected(format!(
+            "cmux cannot read the arguments of the service's daemon (pid {pid}: {e}), so it cannot tell which session it serves"
+        ))
+    })?;
+    let shown = || argv.iter().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" ");
+    if !argv.windows(2).any(|w| w[0] == "--session" && w[1] == session) {
+        return Err(Error::rejected(format!(
+            "the service's daemon (pid {pid}) does not serve session {session:?}, which its unit names (it runs {}), so cmux ends no terminals",
+            shown()
+        )));
+    }
+    // A daemon told where its state or socket is (a unit drop-in can add
+    // that) keeps them where the sweep's daemon would not look.
+    let redirected = argv.iter().any(|a| {
+        let a = a.to_string_lossy();
+        DAEMON_PLACE_FLAGS
+            .iter()
+            .any(|f| a == *f || a.strip_prefix(f).is_some_and(|r| r.starts_with('=')))
+    });
+    if redirected {
+        return Err(Error::rejected(format!(
+            "the service's daemon (pid {pid}) runs with a state or socket of its own ({}), which cmux cannot follow, so it ends no terminals. Stop it and end its terminals yourself (`cmux-tui daemon stop --end-terminals` with the same arguments), then run this command again",
+            shown()
+        )));
+    }
+    Ok(())
+}
+
+/// Arguments that move a daemon's state or socket from where its
+/// environment puts them.
+const DAEMON_PLACE_FLAGS: [&str; 4] = ["--socket", "--state", "--state-dir", "--app-socket"];
+
+fn user_home(s: &Services<'_>, session: &str) -> Result<PathBuf> {
+    crate::sys::home_dir(s.uid).map_err(|e| {
+        Error::rejected(format!(
+            "cmux cannot read the home folder of uid {} from the user database ({e}), so it cannot reach the terminals of session {session:?}",
+            s.uid
+        ))
+    })
+}
+
+/// The binary, a build staged beside it, and each folder install made for
+/// it under HOME (`.local` and `.local/bin` of `SESSION_BINARY`), is this
+/// account's (or root's) and writable by no other account: none can swap
+/// the file uninstall runs.
+fn check_binary(binary: &Path) -> Result<()> {
+    check_not_shared(binary, "the cmux binary of the session service")?;
+    // `daemon ensure` swaps in, and first runs, a build staged beside it
+    // (`<binary>.staged`, cmux-tui staged_update.rs): it gets the same check.
+    let mut staged = binary.as_os_str().to_owned();
+    staged.push(".staged");
+    check_not_shared(Path::new(&staged), "a cmux build staged beside the session binary")?;
+    let folders = Path::new(cmux_server_core::units::SESSION_BINARY).components().count() - 1;
+    for dir in binary.ancestors().skip(1).take(folders) {
+        check_not_shared(dir, "a folder of the cmux binary of the session service")?;
+    }
+    Ok(())
+}
+
+/// Ends the terminal hosts of the session service once its manager stopped
+/// the daemon. Each host runs in a session of its own (`setsid`), so it
+/// outlives a daemon restart: launchd's bootout ends only the job's own
+/// process group, and a host ignores a SIGTERM that does not come from PID 1
+/// (cx-t2sqm.17), so `systemctl --user kill` (the user manager is not PID 1)
+/// leaves it too. The hosts stayed, and a later install's daemon adopted
+/// them. Only a cmux daemon can end them: one started here, once the manager
+/// stopped the service (so it cannot start another beside it), adopts every
+/// host still running, and its stop with `--end-terminals` ends them all
+/// (each shell gets SIGHUP, then SIGTERM, then SIGKILL) and exits. A host a
+/// client of that daemon started meanwhile ends too: the stop refuses new
+/// clients first. Both run with the variables that pick the daemon's state
+/// as the service's daemon had them ([`sweep`]), not as this process has
+/// them.
+/// A failure leaves the unit files, so the command can run again.
+/// `stopped`: what the caller did, for the message.
+pub(super) fn end_terminal_hosts(s: &Services<'_>, sweep: &Sweep, stopped: &str) -> Result<()> {
+    let Sweep { binary, session, env } = sweep;
+    // Checked again right before it runs.
+    check_binary(binary).map_err(|e| outcome(e, &format!("{stopped}; cmux removed nothing")))?;
+    for args in [
+        &["daemon", "ensure", "--session", session, "--json"][..],
+        &["daemon", "stop", "--session", session, "--end-terminals", "--json"][..],
+    ] {
+        let mut cmd = Cmd::new(binary).args(args);
+        for (key, value) in env {
+            cmd = match value {
+                Some(value) => cmd.env(key, value),
+                None => cmd.env_remove(key),
+            };
+        }
+        s.runner.check(&cmd).map_err(|e| {
+            Error::rejected(format!(
+                "cmux could not end the terminals of session {session:?} ({}), so their shells may still run; {stopped} and cmux removed nothing. Run the command again; or end them yourself (`{} daemon ensure --session {session}`, then `{} daemon stop --session {session} --end-terminals`) first",
+                e.message,
+                binary.display(),
+                binary.display()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
 /// `e` with what came of the command added (`nothing was changed`): the
 /// checks say why, their callers say what was done before they refused.
 pub(crate) fn outcome(mut e: Error, what: &str) -> Error {
@@ -603,12 +844,22 @@ impl Services<'_> {
             check_not_shared(&path, "a service unit file cmux wrote")
                 .map_err(|e| outcome(e, "nothing was changed"))?;
         }
+        // What ending the session's terminals needs, read before anything
+        // changes (the renewal included): a refusal changes nothing.
+        let sweep = match &self.layout.service {
+            ServiceKind::SystemdUser { .. } | ServiceKind::SystemdSystem { .. } => {
+                systemd::sweep(self)
+            }
+            ServiceKind::LaunchAgent { .. } => launchd::sweep(self),
+            _ => Ok(None),
+        }
+        .map_err(|e| outcome(e, "nothing was changed"))?;
         self.renew_unit_files()?;
         let removed = match &self.layout.service {
             ServiceKind::SystemdUser { .. } | ServiceKind::SystemdSystem { .. } => {
-                systemd::uninstall(self)
+                systemd::uninstall(self, sweep.as_ref())
             }
-            ServiceKind::LaunchAgent { .. } => launchd::uninstall(self),
+            ServiceKind::LaunchAgent { .. } => launchd::uninstall(self, sweep.as_ref()),
             other => Err(unsupported(other)),
         }?;
         self.forget_written(&removed)?;
