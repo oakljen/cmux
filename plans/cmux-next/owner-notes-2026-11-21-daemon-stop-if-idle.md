@@ -52,12 +52,11 @@ Range on feat-cmux-next: 33dbf5d73136..88507c515693 (launchd fix 7912a1fa3c51, `
   `uninstall_waits_for_launchd_to_drop_the_job_after_its_bootout` (red run 44960533335). Real
   launchd install and uninstall twice on cmux15: no plist, no job, no hold folder left.
 
-### Known gaps (not changed)
+### Known gaps (closed below, in "Follow-up: the two known gaps")
 
-- On macOS, uninstall leaves running terminal hosts alive (launchd ends only the job's own
-  process group); a later install adopts them. On Linux, uninstall ends them.
-- A daemon that `cmux server install` starts opens a default workspace with a shell, so
-  `--if-idle` refuses it until that terminal ends.
+- On macOS, uninstall left running terminal hosts alive.
+- "A daemon that `cmux server install` starts opens a default workspace with a shell": wrong. See
+  the follow-up: a fresh service daemon has no terminal.
 
 ## Follow-up: the service lock and new unit files (cmux-server)
 
@@ -84,3 +83,126 @@ Two gaps left open by R-002/R-004/R-005 are now closed at their root.
 - Tests: `tests/service_ownership.rs` (10 new). Red on the code before the fix: Linux runs
   44972866606 and 44974778143; macOS on cmux15 (5 of 5 red, the two macOS ACL tests included).
   Codex r28 (BLOCK, 3 findings, fixed), r28b, r28c and r28d (BLOCK, 1 finding each, fixed).
+
+## Follow-up: the two known gaps (cmux-server, cmux-server-core, cmux-tui-core)
+
+Real runs on cmux15 (launchd, macOS 27) and Linux fleet runners (systemd 255) found the causes.
+
+- **Uninstall left the shells, on macOS and on Linux.** A terminal host (`cmux-tui __terminal-host`)
+  runs in a session of its own and ignores a SIGTERM that does not come from PID 1
+  (cx-t2sqm.17). `launchctl bootout` ends only the job's process group, and `systemctl --user kill
+  --kill-whom=all` comes from the user manager, which is not PID 1: on Linux the uninstall then
+  refused ("9 processes of cmux-server.service still run") and left the unit. Only a cmux daemon can
+  end the hosts. Now uninstall of the session service (`service/mod.rs` `sweep` and
+  `end_terminal_hosts`), once the manager stopped the daemon (launchd: bootout, then the wait until
+  launchd dropped the job; systemd: `disable --now` of the unit), runs `<binary> daemon ensure
+  --session S` (that daemon adopts every host still running) and `<binary> daemon stop --session S
+  --end-terminals`, then the old systemd kill and checks, then removes the unit files.
+  - The sweep runs with the state the service's daemon used. While that daemon runs (launchd `pid`
+    in `launchctl print`, systemd `MainPID`), uninstall reads HOME, `CMUX_TUI_STATE_DIR` and
+    `XDG_STATE_HOME` from its own environment (`sys::process_environ`: Linux `/proc/PID/environ`,
+    macOS `KERN_PROCARGS2`). macOS shows no environment for an Apple platform binary, so an empty one
+    refuses. When no daemon runs: HOME from the user database (what launchd and systemd give a
+    service) and the two state variables as the manager now gives them (`launchctl getenv`, kept
+    byte for byte; `systemctl --user show-environment`, its `$'...'` quoting decoded). A variable the
+    daemon did not have is removed, never taken from the shell; an empty value counts as unset, as
+    the daemon reads it. A relative state path refuses: the daemon resolved it against its own
+    working directory, the sweep would resolve it against the uninstall's.
+  - The running daemon must serve the session the unit names (`--session S` in its arguments, read
+    the same way), or uninstall ends no terminals: a unit forged through an old write handle cannot
+    point the sweep at another session. A daemon started with a place of its own (`--socket`,
+    `--state`, `--state-dir`, `--app-socket`, as a drop-in could add) is refused too: the sweep's
+    daemon would look elsewhere. A pid query launchd cannot answer refuses; it never reads as "no
+    daemon runs".
+  - Read before anything changes (the unit renewal included), so a refusal changes nothing: that
+    environment, the binary
+    (`$HOME/.local/bin/cmux-tui`; gone: refused, `cmux server install` puts it back), and the binary
+    and its `.local/bin` and `.local` folders being this account's and writable by no other; so must
+    a build staged beside it (`cmux-tui.staged`), which `daemon ensure` swaps in and runs first.
+  - systemd: after `disable --now`, the unit must be inactive before the sweep (its hosts may stay,
+    `KillMode=process`; a daemon still running could start terminals after the sweep).
+  - Known limit: with no daemon running, the manager's environment now is the best answer. A state
+    variable changed in the manager (or a drop-in) after the daemon stopped points the sweep at other
+    state; on macOS its hosts then stay, as all of them did before this change (Linux refuses: its
+    cgroup still holds them).
+  - A failure after the stop keeps the unit files ("removed nothing"); the next uninstall tries again.
+  - An uninstall run in a terminal of the session refuses before it changes anything
+    (`cli/lifecycle.rs`, `service::terminal_session`): the sweep would end that terminal, and the
+    uninstall with it, before the unit files go. A terminal's `CMUX_TUI_SOCKET` names its session
+    only when it is a default socket path (`cmux-tui-UID/<session>.sock`, or the SHA-256 leaf in
+    `cmux-tui-hashed-UID` or `cmux-tui-invalid-UID`); any other socket (a daemon run with
+    `--socket` of its own) refuses too, since cmux cannot tell its session. Only a default socket of
+    another session lets uninstall run in a cmux terminal.
+- **The CLI uninstall renewed a session unit as the store unit.** `cli/lifecycle.rs` built
+  `Services` with no session, so `renew_unit_files` (0412ec9b) wrote the store unit's text over the
+  session unit right before the stop; a failed uninstall would have left a unit that starts another
+  program. The CLI now passes the installed session (`session_service::installed_host`), with the
+  binary that install places (`$HOME/.local/bin/cmux-tui`), never the path the file names.
+- **`--if-idle` and "the default shell".** There is none: a service daemon right after install
+  stops with `--if-idle` (exit 0), under launchd and systemd, in both cycles. Two things kept it busy:
+  - hosts that an uninstall left (above), adopted by the next install's daemon;
+  - terminals of closed tabs that never ended. Closing a workspace leaves its terminals live for the
+    reap grace (Reopen Closed attaches to them until then), but the service daemon had no reaper:
+    `daemon start` runs `--headless`, and a headless owner reaps only with
+    `--terminal-reap-grace-seconds` (`daemon ensure` passes 30). Now the session unit passes it too
+    (`cmux-server-core` `units/session.rs` `SESSION_REAP_GRACE_SECONDS`, in the plist and in
+    `ExecStart`; a unit without it still parses as cmux's). Seen on cmux15: refused at +13 s, stopped
+    at +32 s.
+  - The refusal also says which live terminals belong to closed tabs and will be reaped
+    (`error_details.closed_tabs`, message "... of closed tabs, which end after the reap grace unless
+    reopened"; 0 when the daemon runs no reaper), since "1 live terminal" with no workspace left read
+    like a hidden shell. `Mux::unplaced_and_placed_terminals`
+    takes and drops the state lock before `stop_if_idle::check` takes the registry lock; the idle
+    decision does not change.
+- Tests: `cmux-server/tests/service_ownership.rs`
+  `uninstall_ends_the_sessions_terminals_after_the_service_stopped`,
+  `uninstall_removes_nothing_when_the_terminals_did_not_end`,
+  `uninstall_changes_nothing_when_the_session_binary_is_gone`,
+  `uninstall_changes_nothing_when_the_session_binary_folder_is_shared`,
+  `uninstall_ends_the_terminals_with_the_state_env_of_the_service_manager`,
+  `uninstall_ends_the_terminals_with_the_env_of_the_running_daemon` (each on both platforms),
+  `uninstall_ends_no_terminals_while_systemd_still_runs_the_daemon`,
+  `uninstall_changes_nothing_when_the_daemons_environment_is_hidden` (macOS),
+  `uninstall_ends_no_terminals_of_a_session_the_daemon_does_not_serve`,
+  `uninstall_ends_no_terminals_of_a_daemon_with_a_state_of_its_own`,
+  `uninstall_changes_nothing_when_launchd_cannot_say_whether_the_daemon_runs`,
+  `uninstall_changes_nothing_when_a_staged_build_is_shared`,
+  `uninstall_ends_no_terminals_with_a_relative_state_path`; `service/systemd.rs`
+  `show_environment_values_are_read_as_systemd_quotes_them`;
+  `tests/session_service.rs` `uninstall_stops_the_session_unit_as_cmux_wrote_it` and
+  `uninstall_refuses_to_run_in_a_terminal_of_the_session`;
+  `cmux-server-core/tests/session_units.rs` `the_session_daemon_reaps_closed_terminals` and
+  `session_units_without_the_reap_grace_still_parse`; core `server/tests/stop_if_idle.rs`
+  `stop_if_idle_names_the_terminals_of_closed_tabs`. Red on the code before: Linux runs
+  [44979754368](https://github.com/manaflow-ai/cmux/actions/runs/44979754368) (cmux-server),
+  [44980379978](https://github.com/manaflow-ai/cmux/actions/runs/44980379978) (session units) and
+  [44979421154](https://github.com/manaflow-ai/cmux/actions/runs/44979421154) (core). The Codex r29 tests: [44981334728](https://github.com/manaflow-ai/cmux/actions/runs/44981334728) (3 of 3 red with the old behavior put back at each fix site) and
+  [44982048782](https://github.com/manaflow-ai/cmux/actions/runs/44982048782) (Codex r29b: 4 of 4) [44983540492](https://github.com/manaflow-ai/cmux/actions/runs/44983540492) (r29c: 2 of 2),
+  [44984272152](https://github.com/manaflow-ai/cmux/actions/runs/44984272152) (r29d: 1 of 1) [44985064328](https://github.com/manaflow-ai/cmux/actions/runs/44985064328) (r29e: 2 of 2) and [44986840757](https://github.com/manaflow-ai/cmux/actions/runs/44986840757) (r29f and r29g: 3 of 3).
+- Green on the final code: Linux [44986837127](https://github.com/manaflow-ai/cmux/actions/runs/44986837127) (fmt, clippy
+  `-D warnings` on cmux-server and cmux-server-core, clippy on cmux-tui-core with `-A
+  unused_qualifications` because `language_packs.rs` fails it at the base, the cmux-server and
+  cmux-server-core tests, the core idle-stop and reaper tests); macOS on cmux15 (the same tests).
+- Real runs, two cycles of install, `daemon stop --if-idle` and uninstall each, lock file included:
+  - launchd on cmux15. Before the fix (0412ec9b): hosts left after uninstall, and the next install's
+    daemon refused `--if-idle` with "1 live terminal". After: no daemon, host, shell, plist or lock
+    file left in either cycle; the lock file is 0600 while installed and gone after uninstall.
+  - systemd on Linux (systemd 255): [44981182362](https://github.com/manaflow-ai/cmux/actions/runs/44981182362) and, with the
+    daemon environment read, [44982032501](https://github.com/manaflow-ai/cmux/actions/runs/44982032501) [44983535780](https://github.com/manaflow-ai/cmux/actions/runs/44983535780) and (final code) [44986950002](https://github.com/manaflow-ai/cmux/actions/runs/44986950002), FAIL=0, the same checks; the daemon runs with `--terminal-reap-grace-seconds 30`. Before the fix:
+    [44978909184](https://github.com/manaflow-ai/cmux/actions/runs/44978909184) (uninstall refused
+    with the hosts still running).
+- Test setup trap: a LaunchAgent gets the account's real HOME, not the HOME of the shell that ran
+  `cmux server install`. An e2e with a private HOME must use a session name of its own, or its
+  daemon shares the account's `main` session state.
+- Codex: r29 (BLOCK: 5 findings; 4 fixed, the lock-order one rejected: no lock is held while the
+  other is taken); r29b (BLOCK: 6 findings; 5 fixed; rejected: checking HOME and its parents, since
+  the service manager runs that same path at every start unchecked, and a group-writable HOME of a
+  user-private group is common); r29c (BLOCK: 3 findings; the forged session and the sweep read
+  after the renewal fixed; the stopped-daemon fallback kept as the known limit above); r29d (BLOCK:
+  1 finding, fixed: a failed pid query read as no daemon); r29e (BLOCK: 2 findings, fixed: a daemon
+  with its own state or socket, a shared staged build); r29f (BLOCK: 1 finding, fixed: a relative
+  state path); r29g (BLOCK: 2 findings, both fixed: an uninstall run in a terminal of the session
+  ended itself; an empty state value in the daemon's environment read as a relative path); r29h, on
+  those fixes only (BLOCK: 1 finding, fixed: a terminal of a daemon with a socket of its own was
+  read as another session's, red on the code before in RED_R29H). The r29g and r29h briefs asked
+  for findings at medium severity or above in this change, and the loop stopped there.
