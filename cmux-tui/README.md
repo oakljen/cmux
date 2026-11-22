@@ -22,6 +22,8 @@
 
 ## Build
 
+Windows and Linux: see [docs/building-windows-linux.md](docs/building-windows-linux.md) for one-command build scripts and current test status. Upstream credit: [docs/ATTRIBUTION-PORT.md](docs/ATTRIBUTION-PORT.md).
+
 Builds need Zig 0.16.0, a Rust toolchain, and the `ghostty` submodule initialized. The `ghostty-vt-sys` crate builds `libghostty-vt.a` from the submodule with Zig before compiling the Rust crates.
 
 ```bash

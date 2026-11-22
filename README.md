@@ -29,6 +29,35 @@
   <a href="https://cmux.com/docs/getting-started">Docs</a> · <a href="https://cmux.com/blog">Blog</a> · <a href="https://cmux.com/docs/changelog">Changelog</a> · <a href="https://cmux.com/community">Community</a>
 </p>
 
+## Windows and Linux (community fork)
+
+> This fork of [manaflow-ai/cmux](https://github.com/manaflow-ai/cmux) by **Manaflow, Inc.** adds Windows and Linux build support for `cmux-tui`, the Rust terminal multiplexer in this repo. The macOS app above is upstream's work and still macOS-only. Terminal engine: [Ghostty](https://github.com/ghostty-org/ghostty) by Mitchell Hashimoto and contributors. Not affiliated with or endorsed by Manaflow. See [cmux-tui/docs/ATTRIBUTION-PORT.md](cmux-tui/docs/ATTRIBUTION-PORT.md).
+
+**Build** (installs Rust, Zig and libclang locally):
+
+```powershell
+# Windows (PowerShell). Needs git, Python, Visual Studio Build Tools
+git clone https://github.com/oakljen/cmux.git; cd cmux
+.\cmux-tui\scriptsuild-windows.ps1
+```
+
+```bash
+# Linux (Debian/Ubuntu)
+git clone https://github.com/oakljen/cmux.git && cd cmux
+./cmux-tui/scripts/build-linux.sh
+```
+
+**Run** (from `cmux-tui/`; binary is `target/debug/cmux-tui` or `cmux-tui.exe`):
+
+```bash
+cmux-tui                                  # open the TUI (session "main")
+cmux-tui --session agents                 # named session
+cmux-tui server start --session agents    # headless owner (runs in foreground)
+cmux-tui attach --session agents          # attach from another terminal
+```
+
+Press `Ctrl-b ?` for shortcuts and `Ctrl-b d` to detach. Windows uses ConPTY and the default shell is `pwsh.exe`. Full details, a scripting smoke test and the current test status are in [cmux-tui/docs/building-windows-linux.md](cmux-tui/docs/building-windows-linux.md). The Windows port is early: the interactive TUI has not been fully exercised yet.
+
 ## Features
 
 <table>
