@@ -128,6 +128,8 @@ struct SidebarStickyHeaderTests {
         let before = try Self.header(bench)
         let onScreen = before.view.frame.minY - bench.clip.bounds.minY
         #expect(bench.list.stuckHeader?.group == Self.group)
+        let stuckBefore = bench.list.stuckHeader
+        let clipBefore = bench.clip.bounds
 
         // A click on the stuck header folds as a click on it at rest does (`toggleCollapse`), through the same fold.
         #expect(bench.model.setGroupCollapsed(Self.group, true))
@@ -135,6 +137,7 @@ struct SidebarStickyHeaderTests {
         let after = try Self.header(bench)
         #expect(after.view === before.view)
         #expect(after.row.isCollapsed)
+        Issue.record("DIAG sticky: scale \(bench.list.window?.backingScaleFactor ?? -1) screen \(String(describing: bench.list.window?.screen?.backingScaleFactor)) inset \(bench.list.stickyTopInset) clipBefore \(clipBefore) stuckBefore \(String(describing: stuckBefore)) beforeView \(before.view.frame) clipAfter \(bench.clip.bounds) docH \(bench.list.frame.height) headerY \(after.row.y) afterView \(after.view.frame) rows \(bench.list.displayed.rows.prefix(3).map { "\($0.key) y\($0.y) h\($0.height)" })")
         #expect(abs(after.row.y - Self.top(bench)) < 0.5, "the collapsed header is at its own place, at the visible top")
         #expect(after.view.frame == bench.list.frame(for: after.row))
         #expect(abs(after.view.frame.minY - bench.clip.bounds.minY - onScreen) < 0.5, "the header did not move on screen")

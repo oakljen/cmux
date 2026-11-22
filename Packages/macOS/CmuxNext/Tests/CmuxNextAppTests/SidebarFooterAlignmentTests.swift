@@ -94,6 +94,7 @@ import Testing
         // The line's taller control ends exactly the bottom margin above the window's edge (flipped: maxY is the bottom).
         let lineBottom = max(search.maxY, chip.maxY)
         let floor = h.sidebar.bounds.maxY - SidebarStyle.bottomInset
+        Issue.record("DIAG footer \(c): scale \(h.window.backingScaleFactor) search \(search) chip \(chip) circle \(circle) floor \(floor) inset \(SidebarStyle.bottomInset)")
         #expect(abs(lineBottom - floor) <= 0.25, "the footer line ends at \(lineBottom), the margin at \(floor)")
     }
 
