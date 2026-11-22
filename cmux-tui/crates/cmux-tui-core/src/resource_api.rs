@@ -140,6 +140,10 @@ pub(crate) struct LocalResourceContext {
     pub session_name: String,
     pub generation: String,
     pub revision: u64,
+    /// The session journal head at this read (`session-journal.md`, "Session
+    /// list rows"). A viewer holds a row's "new" state and notifications while
+    /// its own journal cursor for the session is below it.
+    pub journal_head: u64,
 }
 
 pub(crate) struct LocalResourceMachineService {
@@ -377,6 +381,10 @@ fn session_snapshot(context: &LocalResourceContext) -> Value {
         "generation": context.generation,
         "revision": context.revision.to_string(),
         "connected": true,
+        // In `extra`, not a sibling field: an SDK that predates it rejects
+        // unknown siblings but keeps `extra` (`SessionSnapshot` in
+        // resource-operations-v2.json). Decimal, like every journal cursor.
+        "extra": {"journal_head_sequence": context.journal_head.to_string()},
     })
 }
 
@@ -618,6 +626,7 @@ fn session_snapshot_with_journal_head(
             session_name: mux.session.clone(),
             generation: topology.generation.clone(),
             revision: topology.revision,
+            journal_head,
         };
         let sidebar_id = sidebar_view_id(&context.session_id)?;
         let sidebar_views = if sidebar_configured || sidebar_last_size.is_some() {
